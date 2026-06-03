@@ -14,6 +14,8 @@ type AuthContextValue = {
   user: User | null;
   authUserId: string | null;
   signInWithKakao: () => Promise<void>;
+  sendEmailOtp: (email: string) => Promise<void>;
+  verifyEmailOtp: (email: string, token: string) => Promise<void>;
   completeOnboarding: (input: OnboardingInput) => Promise<void>;
   // dev: Supabase 미설정 시 mock 진입용
   devSignIn: (mockUser: User) => void;
@@ -69,6 +71,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(rowToUser(data));
     setStatus('authenticated');
+  }
+
+  async function sendEmailOtp(email: string) {
+    const supabase = getSupabase();
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: true },
+    });
+    if (error) throw error;
+  }
+
+  async function verifyEmailOtp(email: string, token: string) {
+    const supabase = getSupabase();
+    const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+    if (error) throw error;
   }
 
   async function signInWithKakao() {
@@ -129,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ status, user, authUserId, signInWithKakao, completeOnboarding, devSignIn, signOut }}
+      value={{ status, user, authUserId, signInWithKakao, sendEmailOtp, verifyEmailOtp, completeOnboarding, devSignIn, signOut }}
     >
       {children}
     </AuthContext.Provider>
