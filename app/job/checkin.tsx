@@ -70,7 +70,7 @@ export default function CheckinScreen() {
 
     setSubmitting(true);
     try {
-      saveCheckRecord({
+      await saveCheckRecord({
         jobId: job.id,
         driverId: user.id,
         type: checkType,

@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONT_SIZE, PROCESS_LABEL, RADIUS, SPACING, STATUS_LABEL } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useDriverJobs, useJob } from '@/hooks/useJobs';
-import { updateJobStatus } from '@/services/mockJobs';
+import { updateJobStatus } from '@/services/jobsApi';
 import { formatCurrency } from '@/utils/format';
 
 export default function JobDetail() {
@@ -25,6 +25,15 @@ export default function JobDetail() {
     (j) => j.id !== job.id && j.date === job.date && (j.status === 'confirmed' || j.status === 'accepted' || j.status === 'checked_in'),
   );
 
+  const doUpdate = async (status: 'accepted' | 'rejected') => {
+    try {
+      await updateJobStatus(job.id, status);
+      router.back();
+    } catch (e) {
+      Alert.alert('처리 실패', e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const accept = () => {
     if (sameDayConfirmed) {
       Alert.alert(
@@ -32,19 +41,18 @@ export default function JobDetail() {
         `${job.date}에 이미 다른 일감이 잡혀 있습니다. 정말 수락하시겠습니까?`,
         [
           { text: '취소', style: 'cancel' },
-          { text: '수락', onPress: () => { updateJobStatus(job.id, 'accepted'); router.back(); } },
+          { text: '수락', onPress: () => doUpdate('accepted') },
         ],
       );
       return;
     }
-    updateJobStatus(job.id, 'accepted');
-    router.back();
+    doUpdate('accepted');
   };
 
   const reject = () => {
     Alert.alert('거절 확인', '이 일감을 거절하시겠습니까?', [
       { text: '취소', style: 'cancel' },
-      { text: '거절', style: 'destructive', onPress: () => { updateJobStatus(job.id, 'rejected'); router.back(); } },
+      { text: '거절', style: 'destructive', onPress: () => doUpdate('rejected') },
     ]);
   };
 

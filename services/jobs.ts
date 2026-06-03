@@ -1,0 +1,174 @@
+import type { Job, JobProcess, JobStatus } from '@/types';
+import { getSupabase } from './supabase';
+
+type JobRow = {
+  id: string;
+  factory_id: string;
+  factory_name: string;
+  driver_id: string;
+  date: string;
+  process: JobProcess;
+  address: string;
+  amount: number;
+  long_distance: boolean | null;
+  notes: string | null;
+  status: JobStatus;
+  check_in_id: string | null;
+  check_out_id: string | null;
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+function rowToJob(r: JobRow): Job {
+  return {
+    id: r.id,
+    factoryId: r.factory_id,
+    factoryName: r.factory_name,
+    driverId: r.driver_id,
+    date: r.date,
+    process: r.process,
+    address: r.address,
+    amount: r.amount,
+    longDistance: r.long_distance ?? undefined,
+    notes: r.notes ?? undefined,
+    status: r.status,
+    checkInId: r.check_in_id ?? undefined,
+    checkOutId: r.check_out_id ?? undefined,
+    paidAt: r.paid_at ? new Date(r.paid_at).getTime() : undefined,
+    createdAt: new Date(r.created_at).getTime(),
+    updatedAt: new Date(r.updated_at).getTime(),
+  };
+}
+
+export async function listJobsForDriver(driverId: string): Promise<Job[]> {
+  const { data, error } = await getSupabase()
+    .from('jobs')
+    .select('*')
+    .eq('driver_id', driverId)
+    .order('date', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(rowToJob);
+}
+
+export async function listJobsForFactory(factoryId: string): Promise<Job[]> {
+  const { data, error } = await getSupabase()
+    .from('jobs')
+    .select('*')
+    .eq('factory_id', factoryId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(rowToJob);
+}
+
+export async function getJob(id: string): Promise<Job | undefined> {
+  const { data, error } = await getSupabase()
+    .from('jobs')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? rowToJob(data) : undefined;
+}
+
+export function subscribeToDriverJobs(driverId: string, cb: (jobs: Job[]) => void): () => void {
+  const supabase = getSupabase();
+  let cancelled = false;
+  const reload = () => {
+    listJobsForDriver(driverId)
+      .then((jobs) => { if (!cancelled) cb(jobs); })
+      .catch((e) => console.error('subscribeToDriverJobs reload error', e));
+  };
+  reload();
+  const channel = supabase
+    .channel(`jobs:driver:${driverId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'jobs', filter: `driver_id=eq.${driverId}` },
+      reload,
+    )
+    .subscribe();
+  return () => {
+    cancelled = true;
+    supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToFactoryJobs(factoryId: string, cb: (jobs: Job[]) => void): () => void {
+  const supabase = getSupabase();
+  let cancelled = false;
+  const reload = () => {
+    listJobsForFactory(factoryId)
+      .then((jobs) => { if (!cancelled) cb(jobs); })
+      .catch((e) => console.error('subscribeToFactoryJobs reload error', e));
+  };
+  reload();
+  const channel = supabase
+    .channel(`jobs:factory:${factoryId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'jobs', filter: `factory_id=eq.${factoryId}` },
+      reload,
+    )
+    .subscribe();
+  return () => {
+    cancelled = true;
+    supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToJob(id: string, cb: (job: Job | undefined) => void): () => void {
+  const supabase = getSupabase();
+  let cancelled = false;
+  const reload = () => {
+    getJob(id)
+      .then((j) => { if (!cancelled) cb(j); })
+      .catch((e) => console.error('subscribeToJob reload error', e));
+  };
+  reload();
+  const channel = supabase
+    .channel(`job:${id}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'jobs', filter: `id=eq.${id}` },
+      reload,
+    )
+    .subscribe();
+  return () => {
+    cancelled = true;
+    supabase.removeChannel(channel);
+  };
+}
+
+export async function createJob(
+  input: Omit<Job, 'id' | 'createdAt' | 'updatedAt' | 'status'>,
+): Promise<string> {
+  const row = {
+    factory_id: input.factoryId,
+    factory_name: input.factoryName,
+    driver_id: input.driverId,
+    date: input.date,
+    process: input.process,
+    address: input.address,
+    amount: input.amount,
+    long_distance: input.longDistance ?? null,
+    notes: input.notes ?? null,
+    status: 'requested' as JobStatus,
+  };
+  const { data, error } = await getSupabase().from('jobs').insert(row).select('id').single();
+  if (error) throw error;
+  return data.id;
+}
+
+export async function updateJobStatus(
+  id: string,
+  status: JobStatus,
+  patch: Partial<Job> = {},
+): Promise<void> {
+  const dbPatch: Record<string, unknown> = { status };
+  if (patch.checkInId !== undefined) dbPatch.check_in_id = patch.checkInId;
+  if (patch.checkOutId !== undefined) dbPatch.check_out_id = patch.checkOutId;
+  if (patch.paidAt !== undefined) dbPatch.paid_at = new Date(patch.paidAt).toISOString();
+  const { error } = await getSupabase().from('jobs').update(dbPatch).eq('id', id);
+  if (error) throw error;
+}

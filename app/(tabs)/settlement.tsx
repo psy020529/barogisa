@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONT_SIZE, RADIUS, SPACING } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useDriverJobs } from '@/hooks/useJobs';
-import { updateJobStatus } from '@/services/mockJobs';
+import { updateJobStatus } from '@/services/jobsApi';
 import { shareInvoicePdf } from '@/services/invoicePdf';
 import type { Job } from '@/types';
 import { formatCurrency } from '@/utils/format';
@@ -65,10 +65,16 @@ export default function SettlementScreen() {
         { text: '취소', style: 'cancel' },
         {
           text: '수금 완료',
-          onPress: () => {
-            g.jobs
-              .filter((j) => j.status !== 'paid')
-              .forEach((j) => updateJobStatus(j.id, 'paid', { paidAt: Date.now() }));
+          onPress: async () => {
+            try {
+              await Promise.all(
+                g.jobs
+                  .filter((j) => j.status !== 'paid')
+                  .map((j) => updateJobStatus(j.id, 'paid', { paidAt: Date.now() })),
+              );
+            } catch (e) {
+              Alert.alert('처리 실패', e instanceof Error ? e.message : String(e));
+            }
           },
         },
       ],

@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONT_SIZE, PROCESS_LABEL, RADIUS, SCHEDULE_COLORS, SPACING, STATUS_LABEL } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useFactoryJobs } from '@/hooks/useJobs';
-import { updateJobStatus } from '@/services/mockJobs';
+import { updateJobStatus } from '@/services/jobsApi';
 import type { Job, JobStatus } from '@/types';
 import { formatCurrencyShort } from '@/utils/format';
 
@@ -26,7 +26,16 @@ export default function FactoryHome() {
   const confirm = (job: Job) => {
     Alert.alert('확정', `${job.factoryName} → 기사 수락 일감을 확정합니까?`, [
       { text: '취소', style: 'cancel' },
-      { text: '확정', onPress: () => updateJobStatus(job.id, 'confirmed') },
+      {
+        text: '확정',
+        onPress: async () => {
+          try {
+            await updateJobStatus(job.id, 'confirmed');
+          } catch (e) {
+            Alert.alert('처리 실패', e instanceof Error ? e.message : String(e));
+          }
+        },
+      },
     ]);
   };
 

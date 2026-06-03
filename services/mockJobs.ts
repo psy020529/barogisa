@@ -1,7 +1,7 @@
 import type { Job } from '@/types';
 
-// Firebase 연결 전 UI 개발/검증용 인메모리 데이터.
-// EXPO_PUBLIC_FIREBASE_* 환경변수 설정 후 services/jobs.ts 로 교체 예정.
+// Firebase/Supabase 연결 전 UI 개발/검증용 인메모리 데이터.
+// hasSupabaseConfig === true 이면 services/jobs.ts 가 사용됨.
 
 const today = new Date();
 const toIso = (offsetDays: number) => {
@@ -83,15 +83,15 @@ let jobs: Job[] = [
 const listeners = new Set<(jobs: Job[]) => void>();
 const notify = () => listeners.forEach((cb) => cb([...jobs]));
 
-export function listJobsForDriver(driverId: string): Job[] {
+export async function listJobsForDriver(driverId: string): Promise<Job[]> {
   return jobs.filter((j) => j.driverId === driverId);
 }
 
-export function listJobsForFactory(factoryId: string): Job[] {
+export async function listJobsForFactory(factoryId: string): Promise<Job[]> {
   return jobs.filter((j) => j.factoryId === factoryId);
 }
 
-export function getJob(id: string): Job | undefined {
+export async function getJob(id: string): Promise<Job | undefined> {
   return jobs.find((j) => j.id === id);
 }
 
@@ -113,7 +113,18 @@ export function subscribeToFactoryJobs(factoryId: string, cb: (jobs: Job[]) => v
   };
 }
 
-export function createJob(input: Omit<Job, 'id' | 'createdAt' | 'updatedAt' | 'status'>): string {
+export function subscribeToJob(id: string, cb: (job: Job | undefined) => void): () => void {
+  const wrapped = (all: Job[]) => cb(all.find((j) => j.id === id));
+  listeners.add(wrapped);
+  wrapped(jobs);
+  return () => {
+    listeners.delete(wrapped);
+  };
+}
+
+export async function createJob(
+  input: Omit<Job, 'id' | 'createdAt' | 'updatedAt' | 'status'>,
+): Promise<string> {
   const id = `job-${Date.now()}`;
   const now = Date.now();
   jobs = [...jobs, { ...input, id, status: 'requested', createdAt: now, updatedAt: now }];
@@ -121,7 +132,11 @@ export function createJob(input: Omit<Job, 'id' | 'createdAt' | 'updatedAt' | 's
   return id;
 }
 
-export function updateJobStatus(id: string, status: Job['status'], patch: Partial<Job> = {}): void {
+export async function updateJobStatus(
+  id: string,
+  status: Job['status'],
+  patch: Partial<Job> = {},
+): Promise<void> {
   jobs = jobs.map((j) => (j.id === id ? { ...j, ...patch, status, updatedAt: Date.now() } : j));
   notify();
 }

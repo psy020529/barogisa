@@ -4,7 +4,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONT_SIZE, LONG_DISTANCE_SURCHARGE, PROCESS_LABEL, RADIUS, SPACING, STANDARD_RATES } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
-import { createJob } from '@/services/mockJobs';
+import { createJob } from '@/services/jobsApi';
 import type { JobProcess } from '@/types';
 
 // MVP: 실제 기사 디렉토리 연동 전, 데모용 기사 후보 목록.
@@ -36,7 +36,7 @@ export default function FactoryRegister() {
 
   const finalAmount = amountOverride ? Number(amountOverride.replace(/[^0-9]/g, '')) : amount;
 
-  const submit = () => {
+  const submit = async () => {
     if (!user || !user.factoryProfile) {
       Alert.alert('오류', '공장 계정만 일감을 등록할 수 있습니다.');
       return;
@@ -54,20 +54,24 @@ export default function FactoryRegister() {
       return;
     }
     const driver = DEMO_DRIVERS.find((d) => d.id === driverId)!;
-    createJob({
-      factoryId: user.factoryProfile.factoryId,
-      factoryName: user.name,
-      driverId: driver.id,
-      date,
-      process,
-      address: address.trim(),
-      amount: finalAmount,
-      longDistance: longDistance || undefined,
-      notes: notes.trim() || undefined,
-    });
-    Alert.alert('등록 완료', `${driver.name}에게 발주했습니다.`, [
-      { text: '확인', onPress: () => router.back() },
-    ]);
+    try {
+      await createJob({
+        factoryId: user.factoryProfile.factoryId,
+        factoryName: user.name,
+        driverId: driver.id,
+        date,
+        process,
+        address: address.trim(),
+        amount: finalAmount,
+        longDistance: longDistance || undefined,
+        notes: notes.trim() || undefined,
+      });
+      Alert.alert('등록 완료', `${driver.name}에게 발주했습니다.`, [
+        { text: '확인', onPress: () => router.back() },
+      ]);
+    } catch (e) {
+      Alert.alert('등록 실패', e instanceof Error ? e.message : String(e));
+    }
   };
 
   return (
