@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "barogisa",
+    "slug": "barogisa",
+    "version": "1.0.0",
+    "scheme": "barogisa",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.psy020529.barogisa"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e350b57e-73ec-4b97-afb6-d46231867b1e"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e350b57e-73ec-4b97-afb6-d46231867b1e",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}
