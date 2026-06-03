@@ -74,9 +74,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signInWithKakao() {
     const supabase = getSupabase();
     const redirectTo = Linking.createURL('/auth/callback');
+    // 카카오 비즈앱 전환 없는 개인 앱은 phone_number 스코프 요청 불가 (KOE205).
+    // 전화번호는 온보딩 화면에서 직접 입력받음.
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'kakao',
-      options: { redirectTo, scopes: 'phone_number', skipBrowserRedirect: true },
+      options: { redirectTo, skipBrowserRedirect: true },
     });
     if (error) throw error;
     if (!data?.url) throw new Error('OAuth URL이 비어있습니다');
