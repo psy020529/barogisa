@@ -1,5 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
-import * as Linking from 'expo-linking';
+import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { getSupabase, hasSupabaseConfig } from '@/services/supabase';
@@ -90,7 +90,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signInWithKakao() {
     const supabase = getSupabase();
-    const redirectTo = Linking.createURL('/auth/callback');
+    // makeRedirectUri는 환경(dev build / Expo Go)에 맞춰 올바른 형태의 URL을 만든다.
+    // Linking.createURL('/path')는 path가 슬래시로 시작하면 호스트가 비는 형태(barogisa:///path)로
+    // 만들어버려 OS·브라우저·Supabase가 모두 매칭 실패. 그래서 makeRedirectUri 사용.
+    const redirectTo = makeRedirectUri({ scheme: 'barogisa', path: 'auth/callback' });
+    console.log('[KAKAO OAUTH] redirectTo =', redirectTo);
     // Kakao 동의항목 중 "권한 있음" 인 것만 명시 (account_email/phone_number는 비즈앱·검수 필요)
     // 빈 문자열을 전달하면 Supabase가 기본 scope를 추가하니 명시적으로 사용 가능한 것만 적음.
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -101,7 +105,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!data?.url) throw new Error('OAuth URL이 비어있습니다');
 
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-    if (result.type !== 'success') return;
+    console.log('[KAKAO OAUTH] result =', JSON.stringify(result));
+    if (result.type !== 'success') {
+      console.warn('[KAKAO OAUTH] non-success type:', result.type, '— Supabase Redirect URLs 미매칭 가능성');
+      return;
+    }
 
     const code = new URL(result.url).searchParams.get('code');
     if (!code) throw new Error('인증 코드가 없습니다');
