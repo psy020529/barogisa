@@ -31,7 +31,8 @@
     "extra": {
       "eas": {
         "projectId": "e350b57e-73ec-4b97-afb6-d46231867b1e"
-      }
+      },
+      "kakaoNativeAppKey": "842f519b4be92460855eaa2e4fd95a56"
     },
     "updates": {
       "url": "https://u.expo.dev/e350b57e-73ec-4b97-afb6-d46231867b1e",
@@ -42,7 +43,15 @@
     },
     "plugins": [
       "expo-router",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "@react-native-kakao/core",
+        {
+          "nativeAppKey": "842f519b4be92460855eaa2e4fd95a56",
+          "android": { "authCodeHandlerActivity": true },
+          "ios": { "handleKakaoOpenUrl": true }
+        }
+      ]
     ]
   }
 }

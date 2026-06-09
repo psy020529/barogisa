@@ -1,7 +1,5 @@
-import type { Session, SupabaseClient } from '@supabase/supabase-js';
-import { makeRedirectUri } from 'expo-auth-session';
-import * as Linking from 'expo-linking';
-import * as WebBrowser from 'expo-web-browser';
+import type { Session } from '@supabase/supabase-js';
+import { login as kakaoLogin } from '@react-native-kakao/user';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { getSupabase, hasSupabaseConfig } from '@/services/supabase';
 import type { DriverJobType, DriverTier, User, UserRole } from '@/types';
@@ -25,45 +23,6 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-WebBrowser.maybeCompleteAuthSession();
-
-// ── OAuth code 교환 유틸 (모듈 스코프) ─────────────────────────────────────────
-// PKCE 인증 코드는 1회용이다. openAuthSessionAsync 결과 처리와 Linking 딥링크
-// 핸들러가 같은 code로 동시에 exchangeCodeForSession을 호출하면 한쪽이 "code
-// already used"로 실패한다. 아래 inflight 맵으로 code별 교환을 단 한 번만 수행해
-// 이중 교환 레이스를 원천 차단한다.
-const inflightExchange = new Map<string, Promise<void>>();
-
-function exchangeCodeOnce(supabase: SupabaseClient, code: string): Promise<void> {
-  let p = inflightExchange.get(code);
-  if (!p) {
-    p = (async () => {
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
-      if (error) {
-        // 다른 경로가 이미 같은 code로 세션을 만들었을 수 있다. 세션이 있으면 성공으로 간주.
-        const { data } = await supabase.auth.getSession();
-        if (!data.session) throw error;
-      }
-    })();
-    inflightExchange.set(code, p);
-  }
-  return p;
-}
-
-// 리다이렉트 URL에서 에러/코드를 견고하게 추출해 세션을 수립한다.
-// (?code=... 쿼리, error/error_description 모두 처리)
-async function createSessionFromUrl(supabase: SupabaseClient, url: string): Promise<void> {
-  const u = new URL(url);
-  const err = u.searchParams.get('error') ?? u.searchParams.get('error_code');
-  if (err) {
-    const desc = u.searchParams.get('error_description') ?? '';
-    throw new Error(`OAuth 오류: ${err} ${desc}`.trim());
-  }
-  const code = u.searchParams.get('code');
-  if (!code) return; // 코드 없음 = 우리가 처리할 리다이렉트가 아님
-  await exchangeCodeOnce(supabase, code);
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>(hasSupabaseConfig ? 'loading' : 'unauthenticated');
   const [user, setUser] = useState<User | null>(null);
@@ -78,27 +37,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       handleSession(session);
     });
 
-    // OAuth 리다이렉트를 deep link로도 받아 처리 (WebBrowser가 못 잡는 경우 대비).
-    // 앱이 죽은 상태에서 브라우저가 barogisa:// 로 앱을 다시 띄우는 cold start 경로를 커버한다.
-    // exchangeCodeOnce 로 openAuthSessionAsync 경로와의 이중 교환을 방지한다.
-    const handleDeepLink = async (event: { url: string }) => {
-      console.log('[KAKAO OAUTH] deep link received:', event.url);
-      try {
-        await createSessionFromUrl(supabase, event.url);
-      } catch (e) {
-        console.error('[KAKAO OAUTH] deep link session error:', e);
-      }
-    };
-
-    const linkSub = Linking.addEventListener('url', handleDeepLink);
-    // 앱이 deep link로 cold start된 경우도 처리
-    Linking.getInitialURL().then((url) => {
-      if (url) handleDeepLink({ url });
-    });
-
     return () => {
       sub.subscription.unsubscribe();
-      linkSub.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -145,46 +85,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   }
 
+  // ── 카카오 네이티브 로그인 ──────────────────────────────────────────────────
+  // 웹 OAuth(인앱 브라우저 → barogisa:// 리다이렉트) 방식은 안드로이드에서
+  // "카카오톡으로 로그인" 앱 점프 시 브라우저 복귀가 깨져 dismiss → 메인 복귀가
+  // 빈번했다. 또 Supabase 웹 OAuth는 account_email scope를 강제해 검수 벽이 있었다.
+  // → 카카오 네이티브 SDK로 OIDC id_token을 직접 받아 Supabase에 넘긴다.
+  //   리다이렉트가 없으므로 복귀 실패가 원천적으로 사라지고, OIDC라 이메일 검수도 회피된다.
+  //   ⚠️ 전제: Kakao 콘솔에서 OpenID Connect(OIDC) 활성화 + Android 플랫폼(패키지명·키해시) 등록.
   async function signInWithKakao() {
     const supabase = getSupabase();
-    // makeRedirectUri는 환경(dev build / Expo Go)에 맞춰 올바른 형태의 URL을 만든다.
-    // dev build/standalone: barogisa://auth/callback  (Kakao OAuth는 dev build에서 테스트할 것)
-    // Linking.createURL('/path')의 barogisa:///path(트리플 슬래시) 문제를 피하려 makeRedirectUri 사용.
-    const redirectTo = makeRedirectUri({ scheme: 'barogisa', path: 'auth/callback' });
-    console.log('[KAKAO OAUTH] redirectTo =', redirectTo);
-    // ⚠️ 이 redirectTo 값이 Supabase Authentication → URL Configuration → Redirect URLs
-    //    허용목록에 반드시 등록돼 있어야 한다. 없으면 Supabase가 Site URL로 폴백 →
-    //    앱으로 딥링크가 안 돌아와 "로그인 후 메인 화면 복귀" 증상이 발생한다.
-
-    // Kakao 동의항목 중 "권한 있음" 인 것만 명시 (account_email/phone_number는 비즈앱·검수 필요)
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'kakao',
-      options: { redirectTo, scopes: 'profile_nickname profile_image', skipBrowserRedirect: true },
-    });
-    if (error) throw error;
-    if (!data?.url) throw new Error('OAuth URL이 비어있습니다');
-
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-    console.log('[KAKAO OAUTH] result =', JSON.stringify(result));
-
-    if (result.type === 'success') {
-      // 정상 경로: 브라우저가 redirectTo로 돌아옴 → code 추출 → 세션 교환
-      await createSessionFromUrl(supabase, result.url);
-      return;
-    }
-
-    // 비-success(dismiss/cancel): 두 가지 가능성
-    //  1) 사용자가 직접 닫음 → 정상 (조용히 종료)
-    //  2) Supabase Redirect URLs 미허용으로 앱으로 안 돌아옴 → 딥링크 핸들러가
-    //     뒤늦게 처리할 수도 있으니, 잠깐 기다렸다 세션이 생겼는지 확인한다.
-    console.warn('[KAKAO OAUTH] non-success type:', result.type);
-    await new Promise((r) => setTimeout(r, 600));
-    const { data: sess } = await supabase.auth.getSession();
-    if (!sess.session) {
-      console.warn(
-        '[KAKAO OAUTH] 세션 없음 — Supabase Redirect URLs 허용목록에 redirectTo가 등록됐는지 확인 필요',
+    const token = await kakaoLogin();
+    if (!token.idToken) {
+      throw new Error(
+        'Kakao idToken이 없습니다. Kakao 콘솔 → 카카오 로그인 → 고급에서 OpenID Connect(OIDC)를 활성화하세요.',
       );
     }
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: 'kakao',
+      token: token.idToken,
+    });
+    if (error) throw error;
+    // 세션 수립은 onAuthStateChange → handleSession 가 처리한다.
   }
 
   async function completeOnboarding(input: OnboardingInput) {
