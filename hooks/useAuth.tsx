@@ -1,4 +1,4 @@
-import type { Session } from '@supabase/supabase-js';
+import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
@@ -27,6 +27,43 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 WebBrowser.maybeCompleteAuthSession();
 
+// ── OAuth code 교환 유틸 (모듈 스코프) ─────────────────────────────────────────
+// PKCE 인증 코드는 1회용이다. openAuthSessionAsync 결과 처리와 Linking 딥링크
+// 핸들러가 같은 code로 동시에 exchangeCodeForSession을 호출하면 한쪽이 "code
+// already used"로 실패한다. 아래 inflight 맵으로 code별 교환을 단 한 번만 수행해
+// 이중 교환 레이스를 원천 차단한다.
+const inflightExchange = new Map<string, Promise<void>>();
+
+function exchangeCodeOnce(supabase: SupabaseClient, code: string): Promise<void> {
+  let p = inflightExchange.get(code);
+  if (!p) {
+    p = (async () => {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) {
+        // 다른 경로가 이미 같은 code로 세션을 만들었을 수 있다. 세션이 있으면 성공으로 간주.
+        const { data } = await supabase.auth.getSession();
+        if (!data.session) throw error;
+      }
+    })();
+    inflightExchange.set(code, p);
+  }
+  return p;
+}
+
+// 리다이렉트 URL에서 에러/코드를 견고하게 추출해 세션을 수립한다.
+// (?code=... 쿼리, error/error_description 모두 처리)
+async function createSessionFromUrl(supabase: SupabaseClient, url: string): Promise<void> {
+  const u = new URL(url);
+  const err = u.searchParams.get('error') ?? u.searchParams.get('error_code');
+  if (err) {
+    const desc = u.searchParams.get('error_description') ?? '';
+    throw new Error(`OAuth 오류: ${err} ${desc}`.trim());
+  }
+  const code = u.searchParams.get('code');
+  if (!code) return; // 코드 없음 = 우리가 처리할 리다이렉트가 아님
+  await exchangeCodeOnce(supabase, code);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>(hasSupabaseConfig ? 'loading' : 'unauthenticated');
   const [user, setUser] = useState<User | null>(null);
@@ -42,18 +79,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     // OAuth 리다이렉트를 deep link로도 받아 처리 (WebBrowser가 못 잡는 경우 대비).
-    // 표준 Supabase RN 패턴: OS가 barogisa:// scheme으로 앱을 열면 여기서 code 추출 → 세션 교환.
+    // 앱이 죽은 상태에서 브라우저가 barogisa:// 로 앱을 다시 띄우는 cold start 경로를 커버한다.
+    // exchangeCodeOnce 로 openAuthSessionAsync 경로와의 이중 교환을 방지한다.
     const handleDeepLink = async (event: { url: string }) => {
       console.log('[KAKAO OAUTH] deep link received:', event.url);
       try {
-        const urlObj = new URL(event.url);
-        const code = urlObj.searchParams.get('code');
-        if (!code) return;
-        const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
-        if (exErr) console.error('[KAKAO OAUTH] code exchange error:', exErr);
-        else console.log('[KAKAO OAUTH] session established via deep link');
+        await createSessionFromUrl(supabase, event.url);
       } catch (e) {
-        console.error('[KAKAO OAUTH] deep link parse error:', e);
+        console.error('[KAKAO OAUTH] deep link session error:', e);
       }
     };
 
@@ -115,12 +148,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signInWithKakao() {
     const supabase = getSupabase();
     // makeRedirectUri는 환경(dev build / Expo Go)에 맞춰 올바른 형태의 URL을 만든다.
-    // Linking.createURL('/path')는 path가 슬래시로 시작하면 호스트가 비는 형태(barogisa:///path)로
-    // 만들어버려 OS·브라우저·Supabase가 모두 매칭 실패. 그래서 makeRedirectUri 사용.
+    // dev build/standalone: barogisa://auth/callback  (Kakao OAuth는 dev build에서 테스트할 것)
+    // Linking.createURL('/path')의 barogisa:///path(트리플 슬래시) 문제를 피하려 makeRedirectUri 사용.
     const redirectTo = makeRedirectUri({ scheme: 'barogisa', path: 'auth/callback' });
     console.log('[KAKAO OAUTH] redirectTo =', redirectTo);
+    // ⚠️ 이 redirectTo 값이 Supabase Authentication → URL Configuration → Redirect URLs
+    //    허용목록에 반드시 등록돼 있어야 한다. 없으면 Supabase가 Site URL로 폴백 →
+    //    앱으로 딥링크가 안 돌아와 "로그인 후 메인 화면 복귀" 증상이 발생한다.
+
     // Kakao 동의항목 중 "권한 있음" 인 것만 명시 (account_email/phone_number는 비즈앱·검수 필요)
-    // 빈 문자열을 전달하면 Supabase가 기본 scope를 추가하니 명시적으로 사용 가능한 것만 적음.
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'kakao',
       options: { redirectTo, scopes: 'profile_nickname profile_image', skipBrowserRedirect: true },
@@ -130,15 +166,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
     console.log('[KAKAO OAUTH] result =', JSON.stringify(result));
-    if (result.type !== 'success') {
-      console.warn('[KAKAO OAUTH] non-success type:', result.type, '— Supabase Redirect URLs 미매칭 가능성');
+
+    if (result.type === 'success') {
+      // 정상 경로: 브라우저가 redirectTo로 돌아옴 → code 추출 → 세션 교환
+      await createSessionFromUrl(supabase, result.url);
       return;
     }
 
-    const code = new URL(result.url).searchParams.get('code');
-    if (!code) throw new Error('인증 코드가 없습니다');
-    const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
-    if (exErr) throw exErr;
+    // 비-success(dismiss/cancel): 두 가지 가능성
+    //  1) 사용자가 직접 닫음 → 정상 (조용히 종료)
+    //  2) Supabase Redirect URLs 미허용으로 앱으로 안 돌아옴 → 딥링크 핸들러가
+    //     뒤늦게 처리할 수도 있으니, 잠깐 기다렸다 세션이 생겼는지 확인한다.
+    console.warn('[KAKAO OAUTH] non-success type:', result.type);
+    await new Promise((r) => setTimeout(r, 600));
+    const { data: sess } = await supabase.auth.getSession();
+    if (!sess.session) {
+      console.warn(
+        '[KAKAO OAUTH] 세션 없음 — Supabase Redirect URLs 허용목록에 redirectTo가 등록됐는지 확인 필요',
+      );
+    }
   }
 
   async function completeOnboarding(input: OnboardingInput) {
