@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import { makeRedirectUri } from 'expo-auth-session';
+import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { getSupabase, hasSupabaseConfig } from '@/services/supabase';
@@ -40,8 +41,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       handleSession(session);
     });
 
+    // OAuth 리다이렉트를 deep link로도 받아 처리 (WebBrowser가 못 잡는 경우 대비).
+    // 표준 Supabase RN 패턴: OS가 barogisa:// scheme으로 앱을 열면 여기서 code 추출 → 세션 교환.
+    const handleDeepLink = async (event: { url: string }) => {
+      console.log('[KAKAO OAUTH] deep link received:', event.url);
+      try {
+        const urlObj = new URL(event.url);
+        const code = urlObj.searchParams.get('code');
+        if (!code) return;
+        const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
+        if (exErr) console.error('[KAKAO OAUTH] code exchange error:', exErr);
+        else console.log('[KAKAO OAUTH] session established via deep link');
+      } catch (e) {
+        console.error('[KAKAO OAUTH] deep link parse error:', e);
+      }
+    };
+
+    const linkSub = Linking.addEventListener('url', handleDeepLink);
+    // 앱이 deep link로 cold start된 경우도 처리
+    Linking.getInitialURL().then((url) => {
+      if (url) handleDeepLink({ url });
+    });
+
     return () => {
       sub.subscription.unsubscribe();
+      linkSub.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
