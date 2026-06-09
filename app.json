@@ -45,6 +45,16 @@
       "expo-router",
       "expo-web-browser",
       [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraMavenRepos": [
+              "https://devrepo.kakao.com/nexus/content/groups/public/"
+            ]
+          }
+        }
+      ],
+      [
         "@react-native-kakao/core",
         {
           "nativeAppKey": "842f519b4be92460855eaa2e4fd95a56",
