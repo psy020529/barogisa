@@ -162,6 +162,7 @@ type UserRow = {
   driver_tier: string | null;
   factory_id: string | null;
   push_token: string | null;
+  is_admin: boolean | null;
   created_at: string | null;
 };
 
@@ -180,6 +181,7 @@ function rowToUser(row: UserRow): User {
         : undefined,
     factoryProfile: row.role === 'factory' ? { factoryId: row.factory_id ?? row.id } : undefined,
     pushToken: row.push_token ?? undefined,
+    isAdmin: row.is_admin ?? false,
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
   };
 }

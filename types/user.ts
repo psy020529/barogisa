@@ -30,5 +30,6 @@ export interface User {
   driverProfile?: DriverProfile;
   factoryProfile?: FactoryProfile;
   pushToken?: string;
+  isAdmin?: boolean; // 관리자: 양쪽 화면 모두 접근 가능
   createdAt: number;
 }

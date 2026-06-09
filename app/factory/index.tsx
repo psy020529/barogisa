@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONT_SIZE, PROCESS_LABEL, RADIUS, SCHEDULE_COLORS, SPACING, STATUS_LABEL } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useFactoryJobs } from '@/hooks/useJobs';
+import { useMyFactory } from '@/hooks/useMyFactory';
 import { updateJobStatus } from '@/services/jobsApi';
 import type { Job, JobStatus } from '@/types';
 import { formatCurrencyShort } from '@/utils/format';
@@ -16,10 +17,11 @@ function colorForStatus(status: JobStatus): string {
 
 export default function FactoryHome() {
   const { user, signOut } = useAuth();
-  const jobs = useFactoryJobs(user?.factoryProfile?.factoryId);
+  const factory = useMyFactory(user?.id, user?.name);
+  const jobs = useFactoryJobs(factory.factoryId ?? undefined);
 
-  const handleSignOut = () => {
-    signOut();
+  const handleSignOut = async () => {
+    await signOut();
     router.replace('/');
   };
 
@@ -42,18 +44,33 @@ export default function FactoryHome() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>공장 홈</Text>
-        <Pressable onPress={handleSignOut}>
-          <Text style={styles.signOut}>로그아웃</Text>
-        </Pressable>
+        <Text style={styles.title}>{factory.factoryName ?? '공장 홈'}</Text>
+        <View style={{ flexDirection: 'row', gap: SPACING.md }}>
+          {user?.isAdmin && (
+            <Pressable onPress={() => router.replace('/(tabs)/calendar')}>
+              <Text style={styles.linkText}>기사 화면</Text>
+            </Pressable>
+          )}
+          <Pressable onPress={handleSignOut}>
+            <Text style={styles.signOut}>로그아웃</Text>
+          </Pressable>
+        </View>
       </View>
 
-      <Pressable style={styles.cta} onPress={() => router.push('/factory/register')}>
-        <Text style={styles.ctaText}>＋ 새 일감 발주</Text>
+      <Pressable
+        style={[styles.cta, !factory.factoryId && styles.ctaDisabled]}
+        onPress={() => factory.factoryId && router.push('/factory/register')}
+        disabled={!factory.factoryId}
+      >
+        <Text style={styles.ctaText}>
+          {factory.loading ? '준비 중...' : '＋ 새 일감 발주'}
+        </Text>
       </Pressable>
 
       <ScrollView contentContainerStyle={{ padding: SPACING.md }}>
-        {jobs.length === 0 && <Text style={styles.empty}>발주한 일감이 없습니다.</Text>}
+        {jobs.length === 0 && !factory.loading && (
+          <Text style={styles.empty}>발주한 일감이 없습니다.</Text>
+        )}
         {jobs.map((job) => (
           <View key={job.id} style={styles.card}>
             <View style={[styles.statusBar, { backgroundColor: colorForStatus(job.status) }]} />
@@ -82,7 +99,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: SPACING.md,
   },
-  title: { fontSize: FONT_SIZE.heading, fontWeight: '700', color: COLORS.text },
+  title: { fontSize: FONT_SIZE.heading, fontWeight: '700', color: COLORS.text, flex: 1 },
+  linkText: { color: COLORS.primary, fontWeight: '600' },
   signOut: { color: COLORS.danger },
   cta: {
     marginHorizontal: SPACING.md,
@@ -91,6 +109,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     alignItems: 'center',
   },
+  ctaDisabled: { opacity: 0.5 },
   ctaText: { color: '#fff', fontSize: FONT_SIZE.title, fontWeight: '700' },
   empty: { textAlign: 'center', padding: SPACING.xl, color: COLORS.textMuted },
   card: {

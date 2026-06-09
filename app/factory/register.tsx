@@ -1,44 +1,79 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONT_SIZE, LONG_DISTANCE_SURCHARGE, PROCESS_LABEL, RADIUS, SPACING, STANDARD_RATES } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
+import { useMyFactory } from '@/hooks/useMyFactory';
 import { createJob } from '@/services/jobsApi';
+import { getSupabase, hasSupabaseConfig } from '@/services/supabase';
 import type { JobProcess } from '@/types';
 
-// MVP: 실제 기사 디렉토리 연동 전, 데모용 기사 후보 목록.
-const DEMO_DRIVERS = [
-  { id: 'dev-driver-1', name: '김기사 (시공)' },
-  { id: 'dev-driver-2', name: '박기사 (시공)' },
-  { id: 'dev-driver-3', name: '이기사 (재단)' },
-];
-
 const PROCESSES: JobProcess[] = ['installation', 'cutting', 'assembly', 'cleaning', 'faucet', 'delivery'];
+
+type DriverOption = { id: string; name: string };
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
 export default function FactoryRegister() {
   const { user } = useAuth();
+  const factory = useMyFactory(user?.id, user?.name);
+
   const [date, setDate] = useState(todayIso());
   const [process, setProcess] = useState<JobProcess>('installation');
   const [address, setAddress] = useState('');
-  const [driverId, setDriverId] = useState(DEMO_DRIVERS[0].id);
+  const [drivers, setDrivers] = useState<DriverOption[]>([]);
+  const [driverId, setDriverId] = useState<string | null>(null);
   const [longDistance, setLongDistance] = useState(false);
   const [notes, setNotes] = useState('');
+  const [amountOverride, setAmountOverride] = useState<string>('');
+
+  // 실제 users에서 기사·관리자 목록 로드 (DEMO 하드코딩 제거)
+  useEffect(() => {
+    if (!hasSupabaseConfig) return;
+    let cancelled = false;
+    (async () => {
+      const supabase = getSupabase();
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, name')
+        .or('role.eq.driver,is_admin.eq.true')
+        .order('name');
+      if (cancelled) return;
+      if (error) {
+        console.error('drivers load error', error);
+        return;
+      }
+      const list = (data ?? []) as DriverOption[];
+      setDrivers(list);
+      // 본인이 admin이면 본인을 기본 선택 (자가 테스트 편의)
+      const selfFirst = list.find((d) => d.id === user?.id) ?? list[0];
+      if (selfFirst) setDriverId(selfFirst.id);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const baseRate = STANDARD_RATES[process];
   const amount = useMemo(
     () => baseRate + (longDistance ? LONG_DISTANCE_SURCHARGE : 0),
     [baseRate, longDistance],
   );
-  const [amountOverride, setAmountOverride] = useState<string>('');
 
   const finalAmount = amountOverride ? Number(amountOverride.replace(/[^0-9]/g, '')) : amount;
 
   const submit = async () => {
-    if (!user || !user.factoryProfile) {
-      Alert.alert('오류', '공장 계정만 일감을 등록할 수 있습니다.');
+    if (!user) {
+      Alert.alert('오류', '로그인이 필요합니다.');
+      return;
+    }
+    if (!factory.factoryId || !factory.factoryName) {
+      Alert.alert('오류', '공장 정보가 아직 준비되지 않았습니다.');
+      return;
+    }
+    if (!driverId) {
+      Alert.alert('확인', '기사를 선택하세요.');
       return;
     }
     if (!address.trim()) {
@@ -53,11 +88,12 @@ export default function FactoryRegister() {
       Alert.alert('확인', '단가를 확인하세요.');
       return;
     }
-    const driver = DEMO_DRIVERS.find((d) => d.id === driverId)!;
+    const driver = drivers.find((d) => d.id === driverId);
+    if (!driver) return;
     try {
       await createJob({
-        factoryId: user.factoryProfile.factoryId,
-        factoryName: user.name,
+        factoryId: factory.factoryId,
+        factoryName: factory.factoryName,
         driverId: driver.id,
         date,
         process,
@@ -81,9 +117,12 @@ export default function FactoryRegister() {
           <Text style={styles.backText}>← 닫기</Text>
         </Pressable>
         <Text style={styles.title}>일감 발주</Text>
+        {factory.factoryName && (
+          <Text style={styles.subtitle}>{factory.factoryName}</Text>
+        )}
 
         <Field label="시공 날짜 (YYYY-MM-DD)">
-          <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="2026-05-20" />
+          <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="2026-06-15" />
         </Field>
 
         <Field label="공정">
@@ -107,17 +146,24 @@ export default function FactoryRegister() {
         </Field>
 
         <Field label="지정 기사">
-          <View style={styles.row}>
-            {DEMO_DRIVERS.map((d) => (
-              <Pressable
-                key={d.id}
-                style={[styles.chip, driverId === d.id && styles.chipActive]}
-                onPress={() => setDriverId(d.id)}
-              >
-                <Text style={[styles.chipText, driverId === d.id && styles.chipTextActive]}>{d.name}</Text>
-              </Pressable>
-            ))}
-          </View>
+          {drivers.length === 0 ? (
+            <Text style={styles.note}>등록된 기사가 없습니다</Text>
+          ) : (
+            <View style={styles.row}>
+              {drivers.map((d) => (
+                <Pressable
+                  key={d.id}
+                  style={[styles.chip, driverId === d.id && styles.chipActive]}
+                  onPress={() => setDriverId(d.id)}
+                >
+                  <Text style={[styles.chipText, driverId === d.id && styles.chipTextActive]}>
+                    {d.name}
+                    {d.id === user?.id && ' (나)'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
         </Field>
 
         <View style={[styles.field, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
@@ -164,7 +210,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   backText: { fontSize: FONT_SIZE.body, color: COLORS.primary, paddingVertical: SPACING.sm },
-  title: { fontSize: FONT_SIZE.heading, fontWeight: '700', color: COLORS.text, marginTop: SPACING.sm, marginBottom: SPACING.lg },
+  title: { fontSize: FONT_SIZE.heading, fontWeight: '700', color: COLORS.text, marginTop: SPACING.sm },
+  subtitle: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, marginBottom: SPACING.lg },
   field: { marginBottom: SPACING.md },
   fieldLabel: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, marginBottom: SPACING.xs },
   input: {
@@ -177,6 +224,7 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     backgroundColor: '#fff',
   },
+  note: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, paddingVertical: SPACING.sm },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs },
   chip: {
     paddingHorizontal: SPACING.md,
