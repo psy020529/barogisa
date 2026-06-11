@@ -89,7 +89,8 @@
 | 언어 | TypeScript | |
 | 개발 환경 | Windows + WSL2 (Ubuntu 24.04) | |
 | 로컬 테스트 | Expo Go + 갤럭시 실기기 (--tunnel 모드) | |
-| 백엔드/DB | Firebase (창업자 배포 경험 있음) | |
+| 백엔드/DB | Supabase (Postgres + RLS + Realtime + Storage) | 초기 Firebase 검토 후 전환 |
+| 인증 | 카카오 네이티브 SDK(@react-native-kakao) + signInWithIdToken | 웹 OAuth는 안드로이드 복귀 문제로 폐기 |
 | 배포 | EAS Build (iOS 클라우드 빌드) + Play Store | |
 | iOS 테스트 | EAS Build → TestFlight (macOS 없어서 클라우드 빌드) | |
 
@@ -111,7 +112,8 @@ barogisa/
 │       └── register.tsx    # 일감 등록 (공장용)
 ├── components/             # 공통 컴포넌트
 ├── hooks/                  # 커스텀 훅
-├── services/               # Firebase 연동
+├── services/               # Supabase 연동 (supabase.ts, jobs.ts, jobsApi seam)
+├── supabase/migrations/    # DB 스키마·RLS·RPC (001~004)
 ├── types/                  # TypeScript 타입 정의
 └── CLAUDE.md               # 이 파일
 ```
