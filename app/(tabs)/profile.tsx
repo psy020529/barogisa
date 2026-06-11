@@ -1,14 +1,32 @@
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { COLORS, FONT_SIZE, RADIUS, SPACING } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, deleteAccount } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
     router.replace('/');
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert('회원 탈퇴', '계정과 모든 데이터가 삭제됩니다.\n정말 탈퇴하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '탈퇴',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteAccount();
+            router.replace('/');
+          } catch (e) {
+            Alert.alert('탈퇴 실패', e instanceof Error ? e.message : String(e));
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -31,6 +49,10 @@ export default function ProfileScreen() {
       <Pressable style={[styles.button, { backgroundColor: COLORS.danger }]} onPress={handleSignOut}>
         <Text style={styles.buttonText}>로그아웃</Text>
       </Pressable>
+
+      <Pressable onPress={handleDeleteAccount}>
+        <Text style={styles.deleteText}>회원 탈퇴</Text>
+      </Pressable>
     </View>
   );
 }
@@ -46,4 +68,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonText: { color: '#fff', fontSize: FONT_SIZE.title, fontWeight: '600' },
+  deleteText: {
+    marginTop: SPACING.lg,
+    textAlign: 'center',
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZE.caption,
+    textDecorationLine: 'underline',
+  },
 });
