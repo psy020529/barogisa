@@ -95,18 +95,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await handleSession(data.session);
   }
 
+  // 가입 완료는 RPC(SECURITY DEFINER)로 처리한다. 직접 insert 하지 않는 이유:
+  // is_admin 부여 여부를 서버가 카카오 회원번호 허용목록(admin_kakao_ids)으로
+  // 판정해야 하고, 클라이언트는 is_admin 컬럼에 쓰기 권한이 없다 (004 migration).
   async function completeOnboarding(input: OnboardingInput) {
     if (!authUserId) throw new Error('인증된 사용자가 없습니다');
     const supabase = getSupabase();
-    const row = {
-      id: authUserId,
-      role: input.role,
-      name: input.name,
-      phone: input.phone ?? null,
-      driver_job_type: input.role === 'driver' ? 'installation' : null,
-      driver_tier: input.role === 'driver' ? 'standard' : null,
-    };
-    const { data, error } = await supabase.from('users').insert(row).select().single();
+    const { data, error } = await supabase.rpc('complete_onboarding', {
+      p_role: input.role,
+      p_name: input.name,
+      p_phone: input.phone ?? null,
+    });
     if (error) throw error;
     setUser(rowToUser(data));
     setStatus('authenticated');
