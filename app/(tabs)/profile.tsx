@@ -1,10 +1,22 @@
 import { router } from 'expo-router';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import { COLORS, FONT_SIZE, RADIUS, SPACING } from '@/constants';
+import { COLORS, FONT_SIZE, PROCESS_LABEL, RADIUS, SPACING } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
+import type { DriverJobType } from '@/types';
+
+const JOB_TYPES: DriverJobType[] = ['installation', 'cutting', 'assembly', 'cleaning', 'faucet', 'delivery'];
 
 export default function ProfileScreen() {
-  const { user, signOut, deleteAccount } = useAuth();
+  const { user, signOut, deleteAccount, updateDriverJobType } = useAuth();
+
+  const changeJobType = async (jobType: DriverJobType) => {
+    if (jobType === user?.driverProfile?.jobType) return;
+    try {
+      await updateDriverJobType(jobType);
+    } catch (e) {
+      Alert.alert('변경 실패', e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -37,6 +49,28 @@ export default function ProfileScreen() {
       <Text style={styles.row}>전화: {user?.phone ?? '-'}</Text>
       {user?.isAdmin && <Text style={[styles.row, { color: COLORS.primary }]}>관리자 권한</Text>}
 
+      {user?.role === 'driver' && (
+        <View style={styles.jobTypeBox}>
+          <Text style={styles.jobTypeLabel}>내 직군 (일감 추천 기준)</Text>
+          <View style={styles.jobTypeRow}>
+            {JOB_TYPES.map((t) => {
+              const active = user?.driverProfile?.jobType === t;
+              return (
+                <Pressable
+                  key={t}
+                  style={[styles.jobTypeChip, active && styles.jobTypeChipActive]}
+                  onPress={() => changeJobType(t)}
+                >
+                  <Text style={[styles.jobTypeChipText, active && styles.jobTypeChipTextActive]}>
+                    {PROCESS_LABEL[t]}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       {user?.isAdmin && (
         <Pressable
           style={[styles.button, { backgroundColor: COLORS.primary }]}
@@ -68,6 +102,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonText: { color: '#fff', fontSize: FONT_SIZE.title, fontWeight: '600' },
+  jobTypeBox: { marginTop: SPACING.md },
+  jobTypeLabel: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, marginBottom: SPACING.xs },
+  jobTypeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs },
+  jobTypeChip: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  jobTypeChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  jobTypeChipText: { fontSize: FONT_SIZE.body, color: COLORS.text },
+  jobTypeChipTextActive: { color: '#fff', fontWeight: '600' },
   deleteText: {
     marginTop: SPACING.lg,
     textAlign: 'center',

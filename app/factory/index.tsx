@@ -71,21 +71,35 @@ export default function FactoryHome() {
         {jobs.length === 0 && !factory.loading && (
           <Text style={styles.empty}>발주한 일감이 없습니다.</Text>
         )}
-        {jobs.map((job) => (
-          <View key={job.id} style={styles.card}>
-            <View style={[styles.statusBar, { backgroundColor: colorForStatus(job.status) }]} />
-            <View style={{ flex: 1, padding: SPACING.md }}>
-              <Text style={styles.cardDate}>{job.date} · {PROCESS_LABEL[job.process]}</Text>
-              <Text style={styles.cardAddr}>{job.address}</Text>
-              <Text style={styles.cardStatus}>{STATUS_LABEL[job.status]} · {formatCurrencyShort(job.amount)}원</Text>
-              {job.status === 'accepted' && (
-                <Pressable style={styles.confirmBtn} onPress={() => confirm(job)}>
-                  <Text style={styles.confirmBtnText}>최종 확정</Text>
-                </Pressable>
-              )}
+        {jobs.map((job) => {
+          const isOpenRecruiting =
+            job.listingType === 'open' && !job.driverId && job.status === 'requested';
+          return (
+            <View key={job.id} style={styles.card}>
+              <View style={[styles.statusBar, { backgroundColor: colorForStatus(job.status) }]} />
+              <View style={{ flex: 1, padding: SPACING.md }}>
+                <Text style={styles.cardDate}>{job.date} · {PROCESS_LABEL[job.process]}</Text>
+                <Text style={styles.cardAddr}>{job.address}</Text>
+                <Text style={styles.cardStatus}>
+                  {isOpenRecruiting ? '공개 모집 중' : STATUS_LABEL[job.status]} · {formatCurrencyShort(job.amount)}원
+                </Text>
+                {isOpenRecruiting && (
+                  <Pressable
+                    style={styles.confirmBtn}
+                    onPress={() => router.push(`/factory/applicants?jobId=${job.id}`)}
+                  >
+                    <Text style={styles.confirmBtnText}>지원자 보기</Text>
+                  </Pressable>
+                )}
+                {job.status === 'accepted' && (
+                  <Pressable style={styles.confirmBtn} onPress={() => confirm(job)}>
+                    <Text style={styles.confirmBtnText}>최종 확정</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
     </SafeAreaView>
   );

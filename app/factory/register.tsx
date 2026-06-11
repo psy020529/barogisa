@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMyFactory } from '@/hooks/useMyFactory';
 import { createJob } from '@/services/jobsApi';
 import { getSupabase, hasSupabaseConfig } from '@/services/supabase';
-import type { JobProcess } from '@/types';
+import type { JobListingType, JobProcess } from '@/types';
 
 const PROCESSES: JobProcess[] = ['installation', 'cutting', 'assembly', 'cleaning', 'faucet', 'delivery'];
 
@@ -19,6 +19,7 @@ export default function FactoryRegister() {
   const { user } = useAuth();
   const factory = useMyFactory(user?.id, user?.name);
 
+  const [listingType, setListingType] = useState<JobListingType>('direct');
   const [date, setDate] = useState(todayIso());
   const [process, setProcess] = useState<JobProcess>('installation');
   const [address, setAddress] = useState('');
@@ -72,7 +73,7 @@ export default function FactoryRegister() {
       Alert.alert('오류', '공장 정보가 아직 준비되지 않았습니다.');
       return;
     }
-    if (!driverId) {
+    if (listingType === 'direct' && !driverId) {
       Alert.alert('확인', '기사를 선택하세요.');
       return;
     }
@@ -88,13 +89,14 @@ export default function FactoryRegister() {
       Alert.alert('확인', '단가를 확인하세요.');
       return;
     }
-    const driver = drivers.find((d) => d.id === driverId);
-    if (!driver) return;
+    const driver = listingType === 'direct' ? drivers.find((d) => d.id === driverId) : undefined;
+    if (listingType === 'direct' && !driver) return;
     try {
       await createJob({
         factoryId: factory.factoryId,
         factoryName: factory.factoryName,
-        driverId: driver.id,
+        driverId: driver?.id,
+        listingType,
         date,
         process,
         address: address.trim(),
@@ -102,9 +104,13 @@ export default function FactoryRegister() {
         longDistance: longDistance || undefined,
         notes: notes.trim() || undefined,
       });
-      Alert.alert('등록 완료', `${driver.name}에게 발주했습니다.`, [
-        { text: '확인', onPress: () => router.back() },
-      ]);
+      Alert.alert(
+        '등록 완료',
+        listingType === 'direct'
+          ? `${driver!.name}에게 발주했습니다.`
+          : '공개 모집으로 등록했습니다. 기사들이 지원하면 선택할 수 있습니다.',
+        [{ text: '확인', onPress: () => router.back() }],
+      );
     } catch (e) {
       Alert.alert('등록 실패', e instanceof Error ? e.message : String(e));
     }
@@ -120,6 +126,30 @@ export default function FactoryRegister() {
         {factory.factoryName && (
           <Text style={styles.subtitle}>{factory.factoryName}</Text>
         )}
+
+        <Field label="모집 방식">
+          <View style={styles.row}>
+            <Pressable
+              style={[styles.chip, listingType === 'direct' && styles.chipActive]}
+              onPress={() => setListingType('direct')}
+            >
+              <Text style={[styles.chipText, listingType === 'direct' && styles.chipTextActive]}>
+                기사 지명
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.chip, listingType === 'open' && styles.chipActive]}
+              onPress={() => setListingType('open')}
+            >
+              <Text style={[styles.chipText, listingType === 'open' && styles.chipTextActive]}>
+                공개 모집
+              </Text>
+            </Pressable>
+          </View>
+          {listingType === 'open' && (
+            <Text style={styles.note}>조건이 맞는 기사들이 지원하면 그중에서 선택합니다.</Text>
+          )}
+        </Field>
 
         <Field label="시공 날짜 (YYYY-MM-DD)">
           <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="2026-06-15" />
@@ -145,26 +175,28 @@ export default function FactoryRegister() {
           <TextInput style={styles.input} value={address} onChangeText={setAddress} placeholder="예: 서울시 강남구 ..." />
         </Field>
 
-        <Field label="지정 기사">
-          {drivers.length === 0 ? (
-            <Text style={styles.note}>등록된 기사가 없습니다</Text>
-          ) : (
-            <View style={styles.row}>
-              {drivers.map((d) => (
-                <Pressable
-                  key={d.id}
-                  style={[styles.chip, driverId === d.id && styles.chipActive]}
-                  onPress={() => setDriverId(d.id)}
-                >
-                  <Text style={[styles.chipText, driverId === d.id && styles.chipTextActive]}>
-                    {d.name}
-                    {d.id === user?.id && ' (나)'}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-        </Field>
+        {listingType === 'direct' && (
+          <Field label="지정 기사">
+            {drivers.length === 0 ? (
+              <Text style={styles.note}>등록된 기사가 없습니다</Text>
+            ) : (
+              <View style={styles.row}>
+                {drivers.map((d) => (
+                  <Pressable
+                    key={d.id}
+                    style={[styles.chip, driverId === d.id && styles.chipActive]}
+                    onPress={() => setDriverId(d.id)}
+                  >
+                    <Text style={[styles.chipText, driverId === d.id && styles.chipTextActive]}>
+                      {d.name}
+                      {d.id === user?.id && ' (나)'}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </Field>
+        )}
 
         <View style={[styles.field, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
           <Text style={styles.fieldLabel}>장거리 추가 (+{LONG_DISTANCE_SURCHARGE.toLocaleString()}원)</Text>
@@ -191,7 +223,9 @@ export default function FactoryRegister() {
         </Field>
 
         <Pressable style={styles.submit} onPress={submit}>
-          <Text style={styles.submitText}>발주하기</Text>
+          <Text style={styles.submitText}>
+            {listingType === 'direct' ? '발주하기' : '공개 모집 등록'}
+          </Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>

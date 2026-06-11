@@ -1,6 +1,6 @@
-import type { Job } from '@/types';
+import type { Job, JobApplication } from '@/types';
 
-// Firebase/Supabase 연결 전 UI 개발/검증용 인메모리 데이터.
+// Supabase 연결 전 UI 개발/검증용 인메모리 데이터.
 // hasSupabaseConfig === true 이면 services/jobs.ts 가 사용됨.
 
 const today = new Date();
@@ -16,6 +16,7 @@ let jobs: Job[] = [
     factoryId: 'factory-a',
     factoryName: '한솔주방',
     driverId: 'dev-driver-1',
+    listingType: 'direct',
     date: toIso(0),
     process: 'installation',
     address: '서울시 강남구 역삼동 123-4',
@@ -29,6 +30,7 @@ let jobs: Job[] = [
     factoryId: 'dev-factory-1',
     factoryName: '테스트 공장',
     driverId: 'dev-driver-1',
+    listingType: 'direct',
     date: toIso(2),
     process: 'installation',
     address: '경기도 성남시 분당구 정자동 56-7',
@@ -43,6 +45,7 @@ let jobs: Job[] = [
     factoryId: 'factory-a',
     factoryName: '한솔주방',
     driverId: 'dev-driver-1',
+    listingType: 'direct',
     date: toIso(5),
     process: 'installation',
     address: '인천시 연수구 송도동 89-1',
@@ -56,6 +59,7 @@ let jobs: Job[] = [
     factoryId: 'factory-c',
     factoryName: '에넥스',
     driverId: 'dev-driver-1',
+    listingType: 'direct',
     date: toIso(-7),
     process: 'installation',
     address: '서울시 마포구 합정동 12-3',
@@ -69,6 +73,7 @@ let jobs: Job[] = [
     factoryId: 'factory-b',
     factoryName: '리바트키친',
     driverId: 'dev-driver-1',
+    listingType: 'direct',
     date: toIso(-14),
     process: 'installation',
     address: '서울시 송파구 잠실동 45-6',
@@ -139,4 +144,82 @@ export async function updateJobStatus(
 ): Promise<void> {
   jobs = jobs.map((j) => (j.id === id ? { ...j, ...patch, status, updatedAt: Date.now() } : j));
   notify();
+}
+
+// ── 공개 일감 풀 + 지원 (mock 최소 구현) ─────────────────────────────────────
+
+let applications: JobApplication[] = [];
+const appListeners = new Set<(apps: JobApplication[]) => void>();
+const notifyApps = () => appListeners.forEach((cb) => cb([...applications]));
+
+export async function listOpenJobs(): Promise<Job[]> {
+  return jobs.filter((j) => j.listingType === 'open' && !j.driverId && j.status === 'requested');
+}
+
+export function subscribeToOpenJobs(cb: (jobs: Job[]) => void): () => void {
+  const wrapped = (all: Job[]) =>
+    cb(all.filter((j) => j.listingType === 'open' && !j.driverId && j.status === 'requested'));
+  listeners.add(wrapped);
+  wrapped(jobs);
+  return () => {
+    listeners.delete(wrapped);
+  };
+}
+
+export async function applyToJob(jobId: string, driverId: string): Promise<void> {
+  if (applications.some((a) => a.jobId === jobId && a.driverId === driverId)) {
+    throw new Error('이미 지원한 일감입니다');
+  }
+  applications = [
+    ...applications,
+    { id: `app-${Date.now()}`, jobId, driverId, status: 'pending', createdAt: Date.now() },
+  ];
+  notifyApps();
+}
+
+export async function listMyApplications(driverId: string): Promise<JobApplication[]> {
+  return applications.filter((a) => a.driverId === driverId);
+}
+
+export function subscribeToMyApplications(
+  driverId: string,
+  cb: (apps: JobApplication[]) => void,
+): () => void {
+  const wrapped = (all: JobApplication[]) => cb(all.filter((a) => a.driverId === driverId));
+  appListeners.add(wrapped);
+  wrapped(applications);
+  return () => {
+    appListeners.delete(wrapped);
+  };
+}
+
+export async function listApplicants(jobId: string): Promise<JobApplication[]> {
+  return applications.filter((a) => a.jobId === jobId);
+}
+
+export function subscribeToApplicants(
+  jobId: string,
+  cb: (apps: JobApplication[]) => void,
+): () => void {
+  const wrapped = (all: JobApplication[]) => cb(all.filter((a) => a.jobId === jobId));
+  appListeners.add(wrapped);
+  wrapped(applications);
+  return () => {
+    appListeners.delete(wrapped);
+  };
+}
+
+export async function selectApplicant(applicationId: string): Promise<void> {
+  const app = applications.find((a) => a.id === applicationId);
+  if (!app) throw new Error('지원 내역을 찾을 수 없습니다');
+  jobs = jobs.map((j) =>
+    j.id === app.jobId ? { ...j, driverId: app.driverId, status: 'confirmed', updatedAt: Date.now() } : j,
+  );
+  applications = applications.map((a) =>
+    a.jobId === app.jobId
+      ? { ...a, status: a.id === applicationId ? 'selected' : 'rejected' }
+      : a,
+  );
+  notify();
+  notifyApps();
 }

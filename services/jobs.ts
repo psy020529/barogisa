@@ -1,11 +1,12 @@
-import type { Job, JobProcess, JobStatus } from '@/types';
+import type { Job, JobApplication, JobApplicationStatus, JobProcess, JobStatus } from '@/types';
 import { getSupabase } from './supabase';
 
 type JobRow = {
   id: string;
   factory_id: string;
   factory_name: string;
-  driver_id: string;
+  driver_id: string | null;
+  listing_type: 'direct' | 'open';
   date: string;
   process: JobProcess;
   address: string;
@@ -25,7 +26,8 @@ function rowToJob(r: JobRow): Job {
     id: r.id,
     factoryId: r.factory_id,
     factoryName: r.factory_name,
-    driverId: r.driver_id,
+    driverId: r.driver_id ?? undefined,
+    listingType: r.listing_type,
     date: r.date,
     process: r.process,
     address: r.address,
@@ -146,7 +148,8 @@ export async function createJob(
   const row = {
     factory_id: input.factoryId,
     factory_name: input.factoryName,
-    driver_id: input.driverId,
+    driver_id: input.driverId ?? null,
+    listing_type: input.listingType,
     date: input.date,
     process: input.process,
     address: input.address,
@@ -170,5 +173,155 @@ export async function updateJobStatus(
   if (patch.checkOutId !== undefined) dbPatch.check_out_id = patch.checkOutId;
   if (patch.paidAt !== undefined) dbPatch.paid_at = new Date(patch.paidAt).toISOString();
   const { error } = await getSupabase().from('jobs').update(dbPatch).eq('id', id);
+  if (error) throw error;
+}
+
+// ============================================================
+// 공개 일감 풀 + 지원 (베타 스프린트 A)
+// ============================================================
+
+type ApplicationRow = {
+  id: string;
+  job_id: string;
+  driver_id: string;
+  status: JobApplicationStatus;
+  created_at: string;
+  users?: { name: string } | null;
+};
+
+function rowToApplication(r: ApplicationRow): JobApplication {
+  return {
+    id: r.id,
+    jobId: r.job_id,
+    driverId: r.driver_id,
+    driverName: r.users?.name,
+    status: r.status,
+    createdAt: new Date(r.created_at).getTime(),
+  };
+}
+
+// 모집 중인 공개 일감 (기사 미배정 + requested, 오늘 이후)
+export async function listOpenJobs(): Promise<Job[]> {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await getSupabase()
+    .from('jobs')
+    .select('*')
+    .eq('listing_type', 'open')
+    .is('driver_id', null)
+    .eq('status', 'requested')
+    .gte('date', today)
+    .order('date', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(rowToJob);
+}
+
+export function subscribeToOpenJobs(cb: (jobs: Job[]) => void): () => void {
+  const supabase = getSupabase();
+  let cancelled = false;
+  const reload = () => {
+    listOpenJobs()
+      .then((jobs) => { if (!cancelled) cb(jobs); })
+      .catch((e) => console.error('subscribeToOpenJobs reload error', e));
+  };
+  reload();
+  const channel = supabase
+    .channel('jobs:open')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, reload)
+    .subscribe();
+  return () => {
+    cancelled = true;
+    supabase.removeChannel(channel);
+  };
+}
+
+export async function applyToJob(jobId: string, driverId: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from('job_applications')
+    .insert({ job_id: jobId, driver_id: driverId });
+  if (error) {
+    if (error.code === '23505') throw new Error('이미 지원한 일감입니다');
+    throw error;
+  }
+}
+
+// 기사 본인의 지원 내역 (일감찾기 "지원함" 뱃지 + 지원 현황)
+export async function listMyApplications(driverId: string): Promise<JobApplication[]> {
+  const { data, error } = await getSupabase()
+    .from('job_applications')
+    .select('*')
+    .eq('driver_id', driverId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(rowToApplication);
+}
+
+export function subscribeToMyApplications(
+  driverId: string,
+  cb: (apps: JobApplication[]) => void,
+): () => void {
+  const supabase = getSupabase();
+  let cancelled = false;
+  const reload = () => {
+    listMyApplications(driverId)
+      .then((apps) => { if (!cancelled) cb(apps); })
+      .catch((e) => console.error('subscribeToMyApplications reload error', e));
+  };
+  reload();
+  const channel = supabase
+    .channel(`applications:driver:${driverId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'job_applications', filter: `driver_id=eq.${driverId}` },
+      reload,
+    )
+    .subscribe();
+  return () => {
+    cancelled = true;
+    supabase.removeChannel(channel);
+  };
+}
+
+// 공장: 특정 일감의 지원자 목록 (이름 조인)
+export async function listApplicants(jobId: string): Promise<JobApplication[]> {
+  const { data, error } = await getSupabase()
+    .from('job_applications')
+    .select('*, users(name)')
+    .eq('job_id', jobId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(rowToApplication);
+}
+
+export function subscribeToApplicants(
+  jobId: string,
+  cb: (apps: JobApplication[]) => void,
+): () => void {
+  const supabase = getSupabase();
+  let cancelled = false;
+  const reload = () => {
+    listApplicants(jobId)
+      .then((apps) => { if (!cancelled) cb(apps); })
+      .catch((e) => console.error('subscribeToApplicants reload error', e));
+  };
+  reload();
+  const channel = supabase
+    .channel(`applications:job:${jobId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'job_applications', filter: `job_id=eq.${jobId}` },
+      reload,
+    )
+    .subscribe();
+  return () => {
+    cancelled = true;
+    supabase.removeChannel(channel);
+  };
+}
+
+// 공장: 지원자 선택 → 기사 배정 + confirmed + 나머지 자동 거절 (RPC, 트랜잭션)
+export async function selectApplicant(applicationId: string): Promise<void> {
+  const { error } = await getSupabase().rpc('select_applicant', {
+    p_application_id: applicationId,
+  });
   if (error) throw error;
 }

@@ -14,6 +14,7 @@ type AuthContextValue = {
   authUserId: string | null;
   signInWithKakao: () => Promise<void>;
   completeOnboarding: (input: OnboardingInput) => Promise<void>;
+  updateDriverJobType: (jobType: DriverJobType) => Promise<void>;
   // dev: Supabase 미설정 시 mock 진입용
   devSignIn: (mockUser: User) => void;
   signOut: () => Promise<void>;
@@ -111,6 +112,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('authenticated');
   }
 
+  // 직군 변경 (공개 일감 추천 매칭의 키)
+  async function updateDriverJobType(jobType: DriverJobType) {
+    if (!authUserId) throw new Error('인증된 사용자가 없습니다');
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from('users')
+      .update({ driver_job_type: jobType })
+      .eq('id', authUserId)
+      .select()
+      .single();
+    if (error) throw error;
+    setUser(rowToUser(data));
+  }
+
   function devSignIn(mockUser: User) {
     setUser(mockUser);
     setStatus('authenticated');
@@ -148,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ status, user, authUserId, signInWithKakao, completeOnboarding, devSignIn, signOut, deleteAccount }}
+      value={{ status, user, authUserId, signInWithKakao, completeOnboarding, updateDriverJobType, devSignIn, signOut, deleteAccount }}
     >
       {children}
     </AuthContext.Provider>

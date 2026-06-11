@@ -14,11 +14,26 @@ export type JobStatus =
 
 export type JobProcess = DriverJobType;
 
+// direct = 기사 지명 발주 (기존 흐름) | open = 공개 모집 (기사 탐색·지원)
+export type JobListingType = 'direct' | 'open';
+
+export type JobApplicationStatus = 'pending' | 'selected' | 'rejected';
+
+export interface JobApplication {
+  id: string;
+  jobId: string;
+  driverId: string;
+  driverName?: string; // 공장 지원자 목록 표시용 (조인)
+  status: JobApplicationStatus;
+  createdAt: number;
+}
+
 export interface Job {
   id: string;
   factoryId: string;
   factoryName: string; // 화면 표시용 캐시 (조인 회피)
-  driverId: string;    // 공장이 지명한 기사
+  driverId?: string;   // 지명 발주 기사. 공개 모집(open)은 선택 전까지 비어 있음
+  listingType: JobListingType;
   date: string;        // ISO 날짜 (YYYY-MM-DD)
   process: JobProcess;
   address: string;
