@@ -3,12 +3,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import DaumPostcode from '@/components/DaumPostcode';
 import { COLORS, FONT_SIZE, LONG_DISTANCE_SURCHARGE, PROCESS_LABEL, RADIUS, SPACING, STANDARD_RATES } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useJob } from '@/hooks/useJobs';
 import { useMyFactory } from '@/hooks/useMyFactory';
 import { createJob, updateJob } from '@/services/jobsApi';
-import { searchAddress, travelFromFactory, type AddressCandidate, type FactoryTravel } from '@/services/naver';
+import { searchAddress, travelFromFactory, type FactoryTravel } from '@/services/naver';
 import { getSupabase, hasSupabaseConfig } from '@/services/supabase';
 import type { JobListingType, JobProcess } from '@/types';
 
@@ -32,10 +33,9 @@ export default function FactoryRegister() {
   const [date, setDate] = useState(todayIso());
   const [showCalendar, setShowCalendar] = useState(false);
   const [process, setProcess] = useState<JobProcess>('installation');
-  const [address, setAddress] = useState('');
-  const [candidates, setCandidates] = useState<AddressCandidate[]>([]);
+  const [roadAddress, setRoadAddress] = useState('');
+  const [detailAddress, setDetailAddress] = useState('');
   const [travel, setTravel] = useState<FactoryTravel | null>(null);
-  const [addrBusy, setAddrBusy] = useState(false);
   const [addrError, setAddrError] = useState<string | null>(null);
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [driverId, setDriverId] = useState<string | null>(null);
@@ -49,7 +49,7 @@ export default function FactoryRegister() {
     setListingType(editingJob.listingType);
     setDate(editingJob.date);
     setProcess(editingJob.process);
-    setAddress(editingJob.address);
+    setRoadAddress(editingJob.address);
     setDriverId(editingJob.driverId ?? null);
     setNotes(editingJob.notes ?? '');
     setAmountOverride(String(editingJob.amount));
@@ -87,32 +87,15 @@ export default function FactoryRegister() {
   const amount = STANDARD_RATES[process] + (isLongDistance ? LONG_DISTANCE_SURCHARGE : 0);
   const finalAmount = amountOverride ? Number(amountOverride.replace(/[^0-9]/g, '')) : amount;
 
-  const doSearchAddress = async () => {
-    const q = address.trim();
-    if (!q) {
-      Alert.alert('확인', '검색할 주소를 입력하세요.');
-      return;
-    }
-    setAddrBusy(true);
-    setAddrError(null);
-    setCandidates([]);
-    try {
-      const found = await searchAddress(q);
-      if (found.length === 0) setAddrError('검색 결과가 없습니다. 더 구체적으로 입력해 보세요.');
-      else setCandidates(found);
-    } catch (e) {
-      setAddrError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setAddrBusy(false);
-    }
-  };
-
-  const pickCandidate = async (c: AddressCandidate) => {
-    setAddress(c.roadAddress);
-    setCandidates([]);
+  // Daum 우편번호로 도로명 선택 → 네이버 geocoding으로 좌표 → 공장 거리 자동 계산
+  const onPostcodeComplete = async (roadAddr: string) => {
+    setRoadAddress(roadAddr);
     setTravel(null);
+    setAddrError(null);
     try {
-      setTravel(await travelFromFactory({ lat: c.lat, lon: c.lon }));
+      const found = await searchAddress(roadAddr);
+      if (found.length === 0) throw new Error('좌표를 찾을 수 없습니다');
+      setTravel(await travelFromFactory({ lat: found[0].lat, lon: found[0].lon }));
     } catch (e) {
       // 거리 계산 실패는 발주를 막지 않는다 — 장거리 미적용으로 진행
       setAddrError(`거리 계산 실패: ${e instanceof Error ? e.message : String(e)}`);
@@ -132,10 +115,11 @@ export default function FactoryRegister() {
       Alert.alert('확인', '기사를 선택하세요.');
       return;
     }
-    if (!address.trim()) {
-      Alert.alert('확인', '주소를 입력하세요.');
+    if (!roadAddress.trim()) {
+      Alert.alert('확인', '주소 검색으로 주소를 선택하세요.');
       return;
     }
+    const fullAddress = [roadAddress.trim(), detailAddress.trim()].filter(Boolean).join(' ');
     if (!finalAmount || finalAmount <= 0) {
       Alert.alert('확인', '단가를 확인하세요.');
       return;
@@ -148,7 +132,7 @@ export default function FactoryRegister() {
         await updateJob(jobId, {
           date,
           process,
-          address: address.trim(),
+          address: fullAddress,
           amount: finalAmount,
           notes: notes.trim() || undefined,
           // 장거리는 주소를 다시 검색해 거리를 계산한 경우에만 갱신
@@ -173,7 +157,7 @@ export default function FactoryRegister() {
         listingType,
         date,
         process,
-        address: address.trim(),
+        address: fullAddress,
         amount: finalAmount,
         longDistance: isLongDistance || undefined,
         notes: notes.trim() || undefined,
@@ -278,34 +262,18 @@ export default function FactoryRegister() {
         </Field>
 
         <Field label="시공 주소">
-          <View style={{ flexDirection: 'row', gap: SPACING.xs }}>
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              value={address}
-              onChangeText={(t) => {
-                setAddress(t);
-                setTravel(null);
-              }}
-              placeholder="예: 강남구 역삼동 123-4"
-              onSubmitEditing={doSearchAddress}
-            />
-            <Pressable
-              style={[styles.searchBtn, addrBusy && { opacity: 0.6 }]}
-              onPress={doSearchAddress}
-              disabled={addrBusy}
-            >
-              <Text style={styles.searchBtnText}>{addrBusy ? '...' : '검색'}</Text>
-            </Pressable>
-          </View>
+          <DaumPostcode
+            value={roadAddress}
+            placeholder="주소 검색 — 건물명·지번·도로명"
+            onComplete={(r) => onPostcodeComplete(r.roadAddress)}
+          />
+          <TextInput
+            style={[styles.input, { marginTop: SPACING.xs }]}
+            value={detailAddress}
+            onChangeText={setDetailAddress}
+            placeholder="상세주소 (예: 101동 501호)"
+          />
           {addrError && <Text style={styles.addrError}>{addrError}</Text>}
-          {candidates.map((c) => (
-            <Pressable key={c.roadAddress} style={styles.candidate} onPress={() => pickCandidate(c)}>
-              <Text style={styles.candidateRoad}>{c.roadAddress}</Text>
-              {c.jibunAddress !== c.roadAddress && (
-                <Text style={styles.candidateJibun}>{c.jibunAddress}</Text>
-              )}
-            </Pressable>
-          ))}
           {travel && (
             <View style={styles.travelBox}>
               <Text style={styles.travelText}>
