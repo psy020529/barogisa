@@ -73,6 +73,13 @@ export async function getJob(id: string): Promise<Job | undefined> {
   return data ? rowToJob(data) : undefined;
 }
 
+// supabase.channel()은 같은 이름이면 기존 채널 인스턴스를 반환한다. 두 화면이 동시에
+// 같은 이름으로 구독하면 이미 subscribe()된 채널에 .on()을 추가하게 되어
+// "cannot add postgres_changes callbacks after subscribe()" 런타임 에러가 난다.
+// 구독마다 유니크한 채널명을 부여해 원천 차단한다.
+let channelSeq = 0;
+const uniqueChannel = (prefix: string) => `${prefix}:${++channelSeq}:${Date.now()}`;
+
 export function subscribeToDriverJobs(driverId: string, cb: (jobs: Job[]) => void): () => void {
   const supabase = getSupabase();
   let cancelled = false;
@@ -83,7 +90,7 @@ export function subscribeToDriverJobs(driverId: string, cb: (jobs: Job[]) => voi
   };
   reload();
   const channel = supabase
-    .channel(`jobs:driver:${driverId}`)
+    .channel(uniqueChannel(`jobs:driver:${driverId}`))
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'jobs', filter: `driver_id=eq.${driverId}` },
@@ -106,7 +113,7 @@ export function subscribeToFactoryJobs(factoryId: string, cb: (jobs: Job[]) => v
   };
   reload();
   const channel = supabase
-    .channel(`jobs:factory:${factoryId}`)
+    .channel(uniqueChannel(`jobs:factory:${factoryId}`))
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'jobs', filter: `factory_id=eq.${factoryId}` },
@@ -129,7 +136,7 @@ export function subscribeToJob(id: string, cb: (job: Job | undefined) => void): 
   };
   reload();
   const channel = supabase
-    .channel(`job:${id}`)
+    .channel(uniqueChannel(`job:${id}`))
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'jobs', filter: `id=eq.${id}` },
@@ -225,7 +232,7 @@ export function subscribeToOpenJobs(cb: (jobs: Job[]) => void): () => void {
   };
   reload();
   const channel = supabase
-    .channel('jobs:open')
+    .channel(uniqueChannel('jobs:open'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, reload)
     .subscribe();
   return () => {
@@ -268,7 +275,7 @@ export function subscribeToMyApplications(
   };
   reload();
   const channel = supabase
-    .channel(`applications:driver:${driverId}`)
+    .channel(uniqueChannel(`applications:driver:${driverId}`))
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'job_applications', filter: `driver_id=eq.${driverId}` },
@@ -305,7 +312,7 @@ export function subscribeToApplicants(
   };
   reload();
   const channel = supabase
-    .channel(`applications:job:${jobId}`)
+    .channel(uniqueChannel(`applications:job:${jobId}`))
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'job_applications', filter: `job_id=eq.${jobId}` },

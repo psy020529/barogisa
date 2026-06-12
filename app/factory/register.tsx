@@ -1,15 +1,18 @@
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONT_SIZE, LONG_DISTANCE_SURCHARGE, PROCESS_LABEL, RADIUS, SPACING, STANDARD_RATES } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useMyFactory } from '@/hooks/useMyFactory';
 import { createJob } from '@/services/jobsApi';
+import { searchAddress, travelFromFactory, type AddressCandidate, type FactoryTravel } from '@/services/naver';
 import { getSupabase, hasSupabaseConfig } from '@/services/supabase';
 import type { JobListingType, JobProcess } from '@/types';
 
-const PROCESSES: JobProcess[] = ['installation', 'cutting', 'assembly', 'cleaning', 'faucet', 'delivery'];
+// 베타 공정: 시공·재단·조립만 (청소/수전/용달은 추후)
+const PROCESSES: JobProcess[] = ['installation', 'cutting', 'assembly'];
 
 type DriverOption = { id: string; name: string };
 
@@ -21,11 +24,15 @@ export default function FactoryRegister() {
 
   const [listingType, setListingType] = useState<JobListingType>('direct');
   const [date, setDate] = useState(todayIso());
+  const [showCalendar, setShowCalendar] = useState(false);
   const [process, setProcess] = useState<JobProcess>('installation');
   const [address, setAddress] = useState('');
+  const [candidates, setCandidates] = useState<AddressCandidate[]>([]);
+  const [travel, setTravel] = useState<FactoryTravel | null>(null);
+  const [addrBusy, setAddrBusy] = useState(false);
+  const [addrError, setAddrError] = useState<string | null>(null);
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [driverId, setDriverId] = useState<string | null>(null);
-  const [longDistance, setLongDistance] = useState(false);
   const [notes, setNotes] = useState('');
   const [amountOverride, setAmountOverride] = useState<string>('');
 
@@ -56,13 +63,42 @@ export default function FactoryRegister() {
     };
   }, [user?.id]);
 
-  const baseRate = STANDARD_RATES[process];
-  const amount = useMemo(
-    () => baseRate + (longDistance ? LONG_DISTANCE_SURCHARGE : 0),
-    [baseRate, longDistance],
-  );
-
+  // 장거리는 수동 토글 대신 공장~현장 경로 거리(네이버 Directions)로 자동 판정
+  const isLongDistance = travel?.longDistance ?? false;
+  const amount = STANDARD_RATES[process] + (isLongDistance ? LONG_DISTANCE_SURCHARGE : 0);
   const finalAmount = amountOverride ? Number(amountOverride.replace(/[^0-9]/g, '')) : amount;
+
+  const doSearchAddress = async () => {
+    const q = address.trim();
+    if (!q) {
+      Alert.alert('확인', '검색할 주소를 입력하세요.');
+      return;
+    }
+    setAddrBusy(true);
+    setAddrError(null);
+    setCandidates([]);
+    try {
+      const found = await searchAddress(q);
+      if (found.length === 0) setAddrError('검색 결과가 없습니다. 더 구체적으로 입력해 보세요.');
+      else setCandidates(found);
+    } catch (e) {
+      setAddrError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAddrBusy(false);
+    }
+  };
+
+  const pickCandidate = async (c: AddressCandidate) => {
+    setAddress(c.roadAddress);
+    setCandidates([]);
+    setTravel(null);
+    try {
+      setTravel(await travelFromFactory({ lat: c.lat, lon: c.lon }));
+    } catch (e) {
+      // 거리 계산 실패는 발주를 막지 않는다 — 장거리 미적용으로 진행
+      setAddrError(`거리 계산 실패: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
 
   const submit = async () => {
     if (!user) {
@@ -81,10 +117,6 @@ export default function FactoryRegister() {
       Alert.alert('확인', '주소를 입력하세요.');
       return;
     }
-    if (!date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      Alert.alert('확인', '날짜를 YYYY-MM-DD 형식으로 입력하세요.');
-      return;
-    }
     if (!finalAmount || finalAmount <= 0) {
       Alert.alert('확인', '단가를 확인하세요.');
       return;
@@ -101,7 +133,7 @@ export default function FactoryRegister() {
         process,
         address: address.trim(),
         amount: finalAmount,
-        longDistance: longDistance || undefined,
+        longDistance: isLongDistance || undefined,
         notes: notes.trim() || undefined,
       });
       Alert.alert(
@@ -151,9 +183,31 @@ export default function FactoryRegister() {
           )}
         </Field>
 
-        <Field label="시공 날짜 (YYYY-MM-DD)">
-          <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="2026-06-15" />
+        <Field label="시공 날짜">
+          <Pressable style={styles.input} onPress={() => setShowCalendar(true)}>
+            <Text style={styles.dateText}>{date}</Text>
+          </Pressable>
         </Field>
+
+        <Modal visible={showCalendar} transparent animationType="fade">
+          <Pressable style={styles.modalBackdrop} onPress={() => setShowCalendar(false)}>
+            <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+              <Calendar
+                current={date}
+                minDate={todayIso()}
+                markedDates={{ [date]: { selected: true, selectedColor: COLORS.primary } }}
+                onDayPress={(day: { dateString: string }) => {
+                  setDate(day.dateString);
+                  setShowCalendar(false);
+                }}
+                theme={{
+                  todayTextColor: COLORS.primary,
+                  arrowColor: COLORS.primary,
+                }}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         <Field label="공정">
           <View style={styles.row}>
@@ -172,7 +226,44 @@ export default function FactoryRegister() {
         </Field>
 
         <Field label="시공 주소">
-          <TextInput style={styles.input} value={address} onChangeText={setAddress} placeholder="예: 서울시 강남구 ..." />
+          <View style={{ flexDirection: 'row', gap: SPACING.xs }}>
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              value={address}
+              onChangeText={(t) => {
+                setAddress(t);
+                setTravel(null);
+              }}
+              placeholder="예: 강남구 역삼동 123-4"
+              onSubmitEditing={doSearchAddress}
+            />
+            <Pressable
+              style={[styles.searchBtn, addrBusy && { opacity: 0.6 }]}
+              onPress={doSearchAddress}
+              disabled={addrBusy}
+            >
+              <Text style={styles.searchBtnText}>{addrBusy ? '...' : '검색'}</Text>
+            </Pressable>
+          </View>
+          {addrError && <Text style={styles.addrError}>{addrError}</Text>}
+          {candidates.map((c) => (
+            <Pressable key={c.roadAddress} style={styles.candidate} onPress={() => pickCandidate(c)}>
+              <Text style={styles.candidateRoad}>{c.roadAddress}</Text>
+              {c.jibunAddress !== c.roadAddress && (
+                <Text style={styles.candidateJibun}>{c.jibunAddress}</Text>
+              )}
+            </Pressable>
+          ))}
+          {travel && (
+            <View style={styles.travelBox}>
+              <Text style={styles.travelText}>
+                공장에서 약 {travel.km}km · 차로 {travel.minutes}분
+                {travel.longDistance
+                  ? ` · 장거리 (+${LONG_DISTANCE_SURCHARGE.toLocaleString()}원 반영)`
+                  : ' · 근거리'}
+              </Text>
+            </View>
+          )}
         </Field>
 
         {listingType === 'direct' && (
@@ -197,11 +288,6 @@ export default function FactoryRegister() {
             )}
           </Field>
         )}
-
-        <View style={[styles.field, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-          <Text style={styles.fieldLabel}>장거리 추가 (+{LONG_DISTANCE_SURCHARGE.toLocaleString()}원)</Text>
-          <Switch value={longDistance} onValueChange={setLongDistance} />
-        </View>
 
         <Field label={`단가 (표준 ${amount.toLocaleString()}원, 수정 가능)`}>
           <TextInput
@@ -259,6 +345,40 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   note: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, paddingVertical: SPACING.sm },
+  dateText: { fontSize: FONT_SIZE.body, color: COLORS.text },
+  searchBtn: {
+    paddingHorizontal: SPACING.lg,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchBtnText: { color: '#fff', fontWeight: '600' },
+  addrError: { fontSize: FONT_SIZE.caption, color: COLORS.danger, marginTop: SPACING.xs },
+  candidate: {
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    marginTop: SPACING.xs,
+    backgroundColor: '#fff',
+  },
+  candidateRoad: { fontSize: FONT_SIZE.body, color: COLORS.text },
+  candidateJibun: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, marginTop: 2 },
+  travelBox: {
+    marginTop: SPACING.xs,
+    padding: SPACING.sm,
+    borderRadius: RADIUS.sm,
+    backgroundColor: '#EEF4FB',
+  },
+  travelText: { fontSize: FONT_SIZE.caption, color: COLORS.primary, fontWeight: '600' },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    padding: SPACING.lg,
+  },
+  modalCard: { backgroundColor: '#fff', borderRadius: RADIUS.md, padding: SPACING.sm },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs },
   chip: {
     paddingHorizontal: SPACING.md,
