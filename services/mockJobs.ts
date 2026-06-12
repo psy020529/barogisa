@@ -171,13 +171,26 @@ export function subscribeToOpenJobs(cb: (jobs: Job[]) => void): () => void {
   };
 }
 
-export async function applyToJob(jobId: string, driverId: string): Promise<void> {
+export async function applyToJob(
+  jobId: string,
+  driverId: string,
+  start?: { address: string; lat: number; lon: number },
+): Promise<void> {
   if (applications.some((a) => a.jobId === jobId && a.driverId === driverId)) {
     throw new Error('이미 지원한 일감입니다');
   }
   applications = [
     ...applications,
-    { id: `app-${Date.now()}`, jobId, driverId, status: 'pending', createdAt: Date.now() },
+    {
+      id: `app-${Date.now()}`,
+      jobId,
+      driverId,
+      status: 'pending',
+      startAddress: start?.address,
+      startLat: start?.lat,
+      startLon: start?.lon,
+      createdAt: Date.now(),
+    },
   ];
   notifyApps();
 }

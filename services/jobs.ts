@@ -207,6 +207,9 @@ type ApplicationRow = {
   job_id: string;
   driver_id: string;
   status: JobApplicationStatus;
+  start_address: string | null;
+  start_lat: number | null;
+  start_lon: number | null;
   created_at: string;
   users?: { name: string } | null;
 };
@@ -218,6 +221,9 @@ function rowToApplication(r: ApplicationRow): JobApplication {
     driverId: r.driver_id,
     driverName: r.users?.name,
     status: r.status,
+    startAddress: r.start_address ?? undefined,
+    startLat: r.start_lat ?? undefined,
+    startLon: r.start_lon ?? undefined,
     createdAt: new Date(r.created_at).getTime(),
   };
 }
@@ -256,10 +262,20 @@ export function subscribeToOpenJobs(cb: (jobs: Job[]) => void): () => void {
   };
 }
 
-export async function applyToJob(jobId: string, driverId: string): Promise<void> {
-  const { error } = await getSupabase()
-    .from('job_applications')
-    .insert({ job_id: jobId, driver_id: driverId });
+export type ApplyStart = { address: string; lat: number; lon: number };
+
+export async function applyToJob(
+  jobId: string,
+  driverId: string,
+  start?: ApplyStart, // 이번 지원용 출발지 (없으면 프로필 기본)
+): Promise<void> {
+  const { error } = await getSupabase().from('job_applications').insert({
+    job_id: jobId,
+    driver_id: driverId,
+    start_address: start?.address ?? null,
+    start_lat: start?.lat ?? null,
+    start_lon: start?.lon ?? null,
+  });
   if (error) {
     if (error.code === '23505') throw new Error('이미 지원한 일감입니다');
     throw error;

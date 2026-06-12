@@ -25,6 +25,10 @@ export interface JobApplication {
   driverId: string;
   driverName?: string; // 공장 지원자 목록 표시용 (조인)
   status: JobApplicationStatus;
+  // 이번 지원에 한해 지정한 출발지 (없으면 프로필 기본 출발지 사용)
+  startAddress?: string;
+  startLat?: number;
+  startLon?: number;
   createdAt: number;
 }
 

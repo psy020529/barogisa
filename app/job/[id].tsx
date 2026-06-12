@@ -1,13 +1,16 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import DaumPostcode from '@/components/DaumPostcode';
 import { COLORS, FONT_SIZE, LONG_DISTANCE_SURCHARGE, PROCESS_LABEL, RADIUS, SPACING, STATUS_LABEL } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useDriverJobs, useJob, useMyApplications } from '@/hooks/useJobs';
 import { applyToJob, updateJobStatus } from '@/services/jobsApi';
-import { travelFromAddress, type Travel } from '@/services/naver';
+import { searchAddress, travelFromAddress, type Travel } from '@/services/naver';
 import { formatCurrency } from '@/utils/format';
+
+type StartPoint = { address: string; lat: number; lon: number };
 
 export default function JobDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -16,21 +19,47 @@ export default function JobDetail() {
   const allJobs = useDriverJobs(user?.id);
   const myApps = useMyApplications(user?.id);
   const [applying, setApplying] = useState(false);
+  const [applyModal, setApplyModal] = useState(false);
+  // 이번 지원용 출발지 오버라이드 — null이면 프로필 기본 출발지 사용
+  const [applyStart, setApplyStart] = useState<StartPoint | null>(null);
   const [travel, setTravel] = useState<Travel | null>(null);
 
-  // 내 출발지(프로필) → 현장 거리 — 지원/수락 판단 정보 (장거리 판정은 기사 기준)
-  const startLat = user?.driverProfile?.startLat;
-  const startLon = user?.driverProfile?.startLon;
+  // 거리 기준 출발지: 이번 지원용 오버라이드 > 프로필 기본
+  const profileStart: StartPoint | null =
+    user?.driverProfile?.startAddress != null &&
+    user.driverProfile.startLat != null &&
+    user.driverProfile.startLon != null
+      ? {
+          address: user.driverProfile.startAddress,
+          lat: user.driverProfile.startLat,
+          lon: user.driverProfile.startLon,
+        }
+      : null;
+  const effectiveStart = applyStart ?? profileStart;
+
   useEffect(() => {
-    if (!job?.address || startLat == null || startLon == null) return;
+    if (!job?.address || !effectiveStart) return;
     let cancelled = false;
-    travelFromAddress({ lat: startLat, lon: startLon }, job.address)
+    setTravel(null);
+    travelFromAddress({ lat: effectiveStart.lat, lon: effectiveStart.lon }, job.address)
       .then((t) => { if (!cancelled) setTravel(t); })
       .catch((e) => console.warn('travel calc failed:', e));
     return () => {
       cancelled = true;
     };
-  }, [job?.address, startLat, startLon]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job?.address, effectiveStart?.lat, effectiveStart?.lon]);
+
+  // 지원 모달에서 출발지 변경 (이번 현장에 한해)
+  const changeApplyStart = async (roadAddress: string) => {
+    try {
+      const found = await searchAddress(roadAddress);
+      if (found.length === 0) throw new Error('주소의 좌표를 찾을 수 없습니다');
+      setApplyStart({ address: roadAddress, lat: found[0].lat, lon: found[0].lon });
+    } catch (e) {
+      Alert.alert('출발지 설정 실패', e instanceof Error ? e.message : String(e));
+    }
+  };
 
   if (!job) {
     return (
@@ -56,28 +85,15 @@ export default function JobDetail() {
     if (!user) return;
     setApplying(true);
     try {
-      await applyToJob(job.id, user.id);
+      // 오버라이드를 골랐을 때만 출발지를 지원에 기록 (기본은 프로필)
+      await applyToJob(job.id, user.id, applyStart ?? undefined);
+      setApplyModal(false);
       Alert.alert('지원 완료', '공장이 선택하면 알려드립니다.');
     } catch (e) {
       Alert.alert('지원 실패', e instanceof Error ? e.message : String(e));
     } finally {
       setApplying(false);
     }
-  };
-
-  const apply = () => {
-    if (sameDayConfirmed) {
-      Alert.alert(
-        '일정 충돌',
-        `${job.date}에 이미 다른 일감이 잡혀 있습니다. 그래도 지원하시겠습니까?`,
-        [
-          { text: '취소', style: 'cancel' },
-          { text: '지원', onPress: doApply },
-        ],
-      );
-      return;
-    }
-    doApply();
   };
 
   const doUpdate = async (status: 'accepted' | 'rejected') => {
@@ -184,11 +200,10 @@ export default function JobDetail() {
           {/* 공개 모집: 지원하기 / 지원 상태 */}
           {isOpenRecruiting && !myApplication && (
             <Pressable
-              style={[styles.btn, styles.btnPrimary, { flex: 1 }, applying && { opacity: 0.6 }]}
-              onPress={apply}
-              disabled={applying}
+              style={[styles.btn, styles.btnPrimary, { flex: 1 }]}
+              onPress={() => setApplyModal(true)}
             >
-              <Text style={styles.btnText}>{applying ? '지원 중...' : '이 일감에 지원하기'}</Text>
+              <Text style={styles.btnText}>이 일감에 지원하기</Text>
             </Pressable>
           )}
           {isOpenRecruiting && myApplication?.status === 'pending' && (
@@ -224,6 +239,57 @@ export default function JobDetail() {
           )}
         </View>
       </ScrollView>
+
+      {/* 지원 모달 — 이번 현장용 출발지 확인/변경 후 지원 */}
+      <Modal visible={applyModal} transparent animationType="fade" onRequestClose={() => setApplyModal(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setApplyModal(false)}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>지원하기</Text>
+
+            <Text style={styles.modalLabel}>
+              출발지 {applyStart ? '(이번 현장만 적용)' : '(프로필 기본)'}
+            </Text>
+            <DaumPostcode
+              value={effectiveStart?.address ?? ''}
+              placeholder="출발지 주소 검색"
+              onComplete={(r) => changeApplyStart(r.roadAddress)}
+            />
+            {applyStart && (
+              <Pressable onPress={() => setApplyStart(null)}>
+                <Text style={styles.modalReset}>프로필 기본 출발지로 되돌리기</Text>
+              </Pressable>
+            )}
+
+            {effectiveStart && travel && (
+              <View style={styles.modalTravel}>
+                <Text style={styles.modalTravelText}>
+                  현장까지 약 {travel.km}km · 차로 {travel.minutes}분
+                  {travel.longDistance
+                    ? ` · 장거리 (+${LONG_DISTANCE_SURCHARGE.toLocaleString()}원 협의)`
+                    : ''}
+                </Text>
+              </View>
+            )}
+            {!effectiveStart && (
+              <Text style={styles.modalHint}>
+                출발지를 검색하면 현장까지 거리·장거리 여부를 보여드립니다
+              </Text>
+            )}
+
+            {sameDayConfirmed && (
+              <Text style={styles.modalWarn}>⚠ {job.date}에 이미 다른 일감이 있습니다</Text>
+            )}
+
+            <Pressable
+              style={[styles.btn, styles.btnPrimary, { marginTop: SPACING.lg }, applying && { opacity: 0.6 }]}
+              onPress={doApply}
+              disabled={applying}
+            >
+              <Text style={styles.btnText}>{applying ? '지원 중...' : '이 출발지로 지원하기'}</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -271,6 +337,25 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     paddingVertical: SPACING.sm,
   },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    padding: SPACING.lg,
+  },
+  modalCard: { backgroundColor: '#fff', borderRadius: RADIUS.md, padding: SPACING.lg },
+  modalTitle: { fontSize: FONT_SIZE.heading, fontWeight: '700', color: COLORS.text, marginBottom: SPACING.md },
+  modalLabel: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, marginBottom: SPACING.xs },
+  modalReset: { fontSize: FONT_SIZE.caption, color: COLORS.primary, paddingVertical: SPACING.sm },
+  modalTravel: {
+    marginTop: SPACING.sm,
+    padding: SPACING.sm,
+    borderRadius: RADIUS.sm,
+    backgroundColor: '#EEF4FB',
+  },
+  modalTravelText: { fontSize: FONT_SIZE.caption, color: COLORS.primary, fontWeight: '600' },
+  modalHint: { fontSize: FONT_SIZE.caption, color: COLORS.textLight, marginTop: SPACING.sm },
+  modalWarn: { fontSize: FONT_SIZE.caption, color: COLORS.warning, fontWeight: '600', marginTop: SPACING.md },
   warningBox: {
     marginTop: SPACING.lg,
     padding: SPACING.md,
