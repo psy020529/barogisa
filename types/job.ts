@@ -29,6 +29,10 @@ export interface JobApplication {
   startAddress?: string;
   startLat?: number;
   startLon?: number;
+  // 지원 시점에 계산한 출발지 → 현장 거리 (선택 시 장거리 할증 자동 반영 근거)
+  travelKm?: number;
+  travelMinutes?: number;
+  longDistance: boolean;
   createdAt: number;
 }
 

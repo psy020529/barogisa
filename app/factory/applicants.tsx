@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, FONT_SIZE, PROCESS_LABEL, RADIUS, SPACING } from '@/constants';
+import { COLORS, FONT_SIZE, LONG_DISTANCE_SURCHARGE, PROCESS_LABEL, RADIUS, SPACING } from '@/constants';
 import { useApplicants, useJob } from '@/hooks/useJobs';
 import { selectApplicant } from '@/services/jobsApi';
 import { formatCurrencyShort } from '@/utils/format';
@@ -81,6 +81,13 @@ export default function Applicants() {
                   })}{' '}
                   지원
                 </Text>
+                {a.travelKm != null && (
+                  <Text style={[styles.cardTravel, a.longDistance && { color: COLORS.warning }]}>
+                    출발지에서 {a.travelKm}km · {a.travelMinutes}분
+                    {a.longDistance &&
+                      ` · 장거리 (선택 시 +${LONG_DISTANCE_SURCHARGE.toLocaleString()}원)`}
+                  </Text>
+                )}
               </View>
               <Pressable
                 style={[styles.chooseBtn, busy && { opacity: 0.6 }]}
@@ -121,6 +128,7 @@ const styles = StyleSheet.create({
   },
   cardName: { fontSize: FONT_SIZE.title, fontWeight: '600', color: COLORS.text },
   cardTime: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, marginTop: 2 },
+  cardTravel: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, marginTop: 2 },
   chooseBtn: {
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,

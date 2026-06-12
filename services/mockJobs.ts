@@ -175,6 +175,7 @@ export async function applyToJob(
   jobId: string,
   driverId: string,
   start?: { address: string; lat: number; lon: number },
+  _travel?: { km: number; minutes: number; longDistance: boolean },
 ): Promise<void> {
   if (applications.some((a) => a.jobId === jobId && a.driverId === driverId)) {
     throw new Error('이미 지원한 일감입니다');
@@ -189,6 +190,9 @@ export async function applyToJob(
       startAddress: start?.address,
       startLat: start?.lat,
       startLon: start?.lon,
+      travelKm: _travel?.km,
+      travelMinutes: _travel?.minutes,
+      longDistance: _travel?.longDistance ?? false,
       createdAt: Date.now(),
     },
   ];

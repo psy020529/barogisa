@@ -85,8 +85,9 @@ export default function JobDetail() {
     if (!user) return;
     setApplying(true);
     try {
-      // 오버라이드를 골랐을 때만 출발지를 지원에 기록 (기본은 프로필)
-      await applyToJob(job.id, user.id, applyStart ?? undefined);
+      // 출발지 오버라이드(기본은 프로필) + 거리 결과를 지원에 기록.
+      // 거리 결과는 공장이 이 기사를 선택할 때 장거리 할증 자동 합산의 근거가 된다.
+      await applyToJob(job.id, user.id, applyStart ?? undefined, travel ?? undefined);
       setApplyModal(false);
       Alert.alert('지원 완료', '공장이 선택하면 알려드립니다.');
     } catch (e) {
@@ -95,6 +96,12 @@ export default function JobDetail() {
       setApplying(false);
     }
   };
+
+  // 기사 시점 예상 단가: 이미 확정 단가에 할증이 반영된 건(longDistance)이면 그대로,
+  // 아니면 내 출발지 기준 장거리일 때 할증을 합산해 보여준다.
+  const surchargeApplied = job.longDistance === true;
+  const expectedAmount =
+    !surchargeApplied && travel?.longDistance ? job.amount + LONG_DISTANCE_SURCHARGE : job.amount;
 
   const doUpdate = async (status: 'accepted' | 'rejected') => {
     try {
@@ -172,15 +179,20 @@ export default function JobDetail() {
 
         <InfoRow label="시공 날짜" value={job.date} />
         <InfoRow label="주소" value={job.address} />
-        <InfoRow label="단가" value={formatCurrency(job.amount)} />
+        <InfoRow
+          label="단가"
+          value={
+            expectedAmount !== job.amount
+              ? `${formatCurrency(expectedAmount)} (기본 ${formatCurrency(job.amount)} + 장거리 ${formatCurrency(LONG_DISTANCE_SURCHARGE)})`
+              : surchargeApplied
+                ? `${formatCurrency(job.amount)} (장거리 할증 포함)`
+                : formatCurrency(job.amount)
+          }
+        />
         {travel && (
           <InfoRow
             label="내 출발지에서"
-            value={`약 ${travel.km}km · 차로 ${travel.minutes}분${
-              travel.longDistance
-                ? ` · 장거리 (+${LONG_DISTANCE_SURCHARGE.toLocaleString()}원 협의)`
-                : ''
-            }`}
+            value={`약 ${travel.km}km · 차로 ${travel.minutes}분${travel.longDistance ? ' · 장거리' : ''}`}
           />
         )}
         {!travel && user?.role === 'driver' && !user?.driverProfile?.startAddress && (
@@ -265,7 +277,7 @@ export default function JobDetail() {
                 <Text style={styles.modalTravelText}>
                   현장까지 약 {travel.km}km · 차로 {travel.minutes}분
                   {travel.longDistance
-                    ? ` · 장거리 (+${LONG_DISTANCE_SURCHARGE.toLocaleString()}원 협의)`
+                    ? ` · 장거리 → 단가 ${formatCurrency(job.amount + LONG_DISTANCE_SURCHARGE)} (할증 자동 반영)`
                     : ''}
                 </Text>
               </View>

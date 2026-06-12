@@ -210,6 +210,9 @@ type ApplicationRow = {
   start_address: string | null;
   start_lat: number | null;
   start_lon: number | null;
+  travel_km: number | null;
+  travel_minutes: number | null;
+  long_distance: boolean | null;
   created_at: string;
   users?: { name: string } | null;
 };
@@ -224,6 +227,9 @@ function rowToApplication(r: ApplicationRow): JobApplication {
     startAddress: r.start_address ?? undefined,
     startLat: r.start_lat ?? undefined,
     startLon: r.start_lon ?? undefined,
+    travelKm: r.travel_km ?? undefined,
+    travelMinutes: r.travel_minutes ?? undefined,
+    longDistance: r.long_distance ?? false,
     createdAt: new Date(r.created_at).getTime(),
   };
 }
@@ -263,11 +269,13 @@ export function subscribeToOpenJobs(cb: (jobs: Job[]) => void): () => void {
 }
 
 export type ApplyStart = { address: string; lat: number; lon: number };
+export type ApplyTravel = { km: number; minutes: number; longDistance: boolean };
 
 export async function applyToJob(
   jobId: string,
   driverId: string,
   start?: ApplyStart, // 이번 지원용 출발지 (없으면 프로필 기본)
+  travel?: ApplyTravel, // 출발지 → 현장 거리 (선택 시 장거리 할증 자동 반영의 근거)
 ): Promise<void> {
   const { error } = await getSupabase().from('job_applications').insert({
     job_id: jobId,
@@ -275,6 +283,9 @@ export async function applyToJob(
     start_address: start?.address ?? null,
     start_lat: start?.lat ?? null,
     start_lon: start?.lon ?? null,
+    travel_km: travel?.km ?? null,
+    travel_minutes: travel?.minutes ?? null,
+    long_distance: travel?.longDistance ?? false,
   });
   if (error) {
     if (error.code === '23505') throw new Error('이미 지원한 일감입니다');
