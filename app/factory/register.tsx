@@ -1,12 +1,13 @@
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONT_SIZE, LONG_DISTANCE_SURCHARGE, PROCESS_LABEL, RADIUS, SPACING, STANDARD_RATES } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
+import { useJob } from '@/hooks/useJobs';
 import { useMyFactory } from '@/hooks/useMyFactory';
-import { createJob } from '@/services/jobsApi';
+import { createJob, updateJob } from '@/services/jobsApi';
 import { searchAddress, travelFromFactory, type AddressCandidate, type FactoryTravel } from '@/services/naver';
 import { getSupabase, hasSupabaseConfig } from '@/services/supabase';
 import type { JobListingType, JobProcess } from '@/types';
@@ -21,6 +22,11 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 export default function FactoryRegister() {
   const { user } = useAuth();
   const factory = useMyFactory(user?.id, user?.name);
+  // jobId가 있으면 수정 모드 — 같은 폼을 재사용한다
+  const { jobId } = useLocalSearchParams<{ jobId?: string }>();
+  const editingJob = useJob(jobId || undefined);
+  const isEdit = Boolean(jobId);
+  const prefilled = useRef(false);
 
   const [listingType, setListingType] = useState<JobListingType>('direct');
   const [date, setDate] = useState(todayIso());
@@ -35,6 +41,19 @@ export default function FactoryRegister() {
   const [driverId, setDriverId] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [amountOverride, setAmountOverride] = useState<string>('');
+
+  // 수정 모드: 기존 일감 값으로 폼 1회 채움
+  useEffect(() => {
+    if (!editingJob || prefilled.current) return;
+    prefilled.current = true;
+    setListingType(editingJob.listingType);
+    setDate(editingJob.date);
+    setProcess(editingJob.process);
+    setAddress(editingJob.address);
+    setDriverId(editingJob.driverId ?? null);
+    setNotes(editingJob.notes ?? '');
+    setAmountOverride(String(editingJob.amount));
+  }, [editingJob]);
 
   // 실제 users에서 기사·관리자 목록 로드 (DEMO 하드코딩 제거)
   useEffect(() => {
@@ -123,6 +142,29 @@ export default function FactoryRegister() {
     }
     const driver = listingType === 'direct' ? drivers.find((d) => d.id === driverId) : undefined;
     if (listingType === 'direct' && !driver) return;
+
+    if (isEdit && jobId) {
+      try {
+        await updateJob(jobId, {
+          date,
+          process,
+          address: address.trim(),
+          amount: finalAmount,
+          notes: notes.trim() || undefined,
+          // 장거리는 주소를 다시 검색해 거리를 계산한 경우에만 갱신
+          ...(travel ? { longDistance: travel.longDistance } : {}),
+          // 기사 변경은 지명 발주에서만 (공개 모집 건은 선택 흐름으로 배정)
+          ...(listingType === 'direct' && driver ? { driverId: driver.id } : {}),
+        });
+        Alert.alert('수정 완료', '일감 정보를 수정했습니다.', [
+          { text: '확인', onPress: () => router.back() },
+        ]);
+      } catch (e) {
+        Alert.alert('수정 실패', e instanceof Error ? e.message : String(e));
+      }
+      return;
+    }
+
     try {
       await createJob({
         factoryId: factory.factoryId,
@@ -154,11 +196,20 @@ export default function FactoryRegister() {
         <Pressable onPress={() => router.back()}>
           <Text style={styles.backText}>← 닫기</Text>
         </Pressable>
-        <Text style={styles.title}>일감 발주</Text>
+        <Text style={styles.title}>{isEdit ? '일감 수정' : '일감 발주'}</Text>
         {factory.factoryName && (
           <Text style={styles.subtitle}>{factory.factoryName}</Text>
         )}
+        {isEdit && editingJob && (editingJob.status === 'accepted' || editingJob.status === 'confirmed') && (
+          <View style={styles.editWarn}>
+            <Text style={styles.editWarnText}>
+              ⚠ 기사가 이미 {editingJob.status === 'accepted' ? '수락' : '확정'}한 일감입니다.
+              변경 내용을 기사에게 따로 알려주세요.
+            </Text>
+          </View>
+        )}
 
+        {!isEdit && (
         <Field label="모집 방식">
           <View style={styles.row}>
             <Pressable
@@ -182,6 +233,7 @@ export default function FactoryRegister() {
             <Text style={styles.note}>조건이 맞는 기사들이 지원하면 그중에서 선택합니다.</Text>
           )}
         </Field>
+        )}
 
         <Field label="시공 날짜">
           <Pressable style={styles.input} onPress={() => setShowCalendar(true)}>
@@ -310,7 +362,7 @@ export default function FactoryRegister() {
 
         <Pressable style={styles.submit} onPress={submit}>
           <Text style={styles.submitText}>
-            {listingType === 'direct' ? '발주하기' : '공개 모집 등록'}
+            {isEdit ? '수정 저장' : listingType === 'direct' ? '발주하기' : '공개 모집 등록'}
           </Text>
         </Pressable>
       </ScrollView>
@@ -346,6 +398,13 @@ const styles = StyleSheet.create({
   },
   note: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, paddingVertical: SPACING.sm },
   dateText: { fontSize: FONT_SIZE.body, color: COLORS.text },
+  editWarn: {
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#FFF4E5',
+    marginBottom: SPACING.md,
+  },
+  editWarnText: { fontSize: FONT_SIZE.caption, color: COLORS.warning, fontWeight: '600' },
   searchBtn: {
     paddingHorizontal: SPACING.lg,
     borderRadius: RADIUS.md,

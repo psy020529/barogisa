@@ -95,7 +95,17 @@ export default function FactoryHome() {
             <View key={job.id} style={styles.card}>
               <View style={[styles.statusBar, { backgroundColor: colorForStatus(job.status) }]} />
               <View style={{ flex: 1, padding: SPACING.md }}>
-                <Text style={styles.cardDate}>{job.date} · {PROCESS_LABEL[job.process]}</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={styles.cardDate}>{job.date} · {PROCESS_LABEL[job.process]}</Text>
+                  {job.status !== 'completed' && job.status !== 'paid' && job.status !== 'cancelled' && (
+                    <Pressable
+                      hitSlop={8}
+                      onPress={() => router.push(`/factory/register?jobId=${job.id}`)}
+                    >
+                      <Text style={styles.editLink}>수정</Text>
+                    </Pressable>
+                  )}
+                </View>
                 <Text style={styles.cardAddr}>{job.address}</Text>
                 <Text style={styles.cardStatus}>
                   {isOpenRecruiting ? '공개 모집 중' : STATUS_LABEL[job.status]} · {formatCurrencyShort(job.amount)}원
@@ -161,6 +171,7 @@ const styles = StyleSheet.create({
   },
   statusBar: { width: 4 },
   cardDate: { fontSize: FONT_SIZE.title, fontWeight: '600', color: COLORS.text },
+  editLink: { fontSize: FONT_SIZE.caption, color: COLORS.primary, fontWeight: '600' },
   cardAddr: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, marginTop: 2 },
   cardStatus: { fontSize: FONT_SIZE.caption, color: COLORS.textLight, marginTop: 4 },
   confirmBtn: {

@@ -14,6 +14,7 @@ export const subscribeToDriverJobs = api.subscribeToDriverJobs;
 export const subscribeToFactoryJobs = api.subscribeToFactoryJobs;
 export const subscribeToJob = api.subscribeToJob;
 export const createJob = api.createJob;
+export const updateJob = api.updateJob;
 export const updateJobStatus = api.updateJobStatus;
 
 // 공개 일감 풀 + 지원

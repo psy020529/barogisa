@@ -170,6 +170,21 @@ export async function createJob(
   return data.id;
 }
 
+// 공장이 발주 정보를 전면 수정 (RLS: 본인 공장 일감만 통과)
+export async function updateJob(id: string, patch: Partial<Job>): Promise<void> {
+  const dbPatch: Record<string, unknown> = {};
+  if (patch.date !== undefined) dbPatch.date = patch.date;
+  if (patch.process !== undefined) dbPatch.process = patch.process;
+  if (patch.address !== undefined) dbPatch.address = patch.address;
+  if (patch.amount !== undefined) dbPatch.amount = patch.amount;
+  if (patch.longDistance !== undefined) dbPatch.long_distance = patch.longDistance;
+  if (patch.notes !== undefined) dbPatch.notes = patch.notes || null;
+  if (patch.driverId !== undefined) dbPatch.driver_id = patch.driverId ?? null;
+  if (Object.keys(dbPatch).length === 0) return;
+  const { error } = await getSupabase().from('jobs').update(dbPatch).eq('id', id);
+  if (error) throw error;
+}
+
 export async function updateJobStatus(
   id: string,
   status: JobStatus,

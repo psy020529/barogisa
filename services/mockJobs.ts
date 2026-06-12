@@ -137,6 +137,11 @@ export async function createJob(
   return id;
 }
 
+export async function updateJob(id: string, patch: Partial<Job>): Promise<void> {
+  jobs = jobs.map((j) => (j.id === id ? { ...j, ...patch, updatedAt: Date.now() } : j));
+  notify();
+}
+
 export async function updateJobStatus(
   id: string,
   status: Job['status'],
