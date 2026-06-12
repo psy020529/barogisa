@@ -4,6 +4,7 @@ export const SCHEDULE_COLORS = {
   companyJob: '#3FA34D',// 회사 일정 — 초록
   newJob: '#E63946',    // 신규 일감 — 빨강
   pending: '#F4A261',   // 주황 — 기사 수락/공장 미확정
+  open: '#8E44AD',      // 보라 — 공개 모집 중 (지원 가능)
 };
 
 export const COLORS = {

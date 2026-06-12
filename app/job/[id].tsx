@@ -99,6 +99,21 @@ export default function JobDetail() {
     router.push(`/job/checkin?jobId=${job.id}&type=${type}`);
   };
 
+  // 상태별 "지금 할 일" 안내 — 사용자가 무엇을 눌러야 하는지 한 줄로
+  const guide = (() => {
+    if (isOpenRecruiting && !myApplication) return '👇 마음에 들면 아래 [지원하기]를 누르세요';
+    if (isOpenRecruiting && myApplication?.status === 'pending')
+      return '⏳ 지원 완료 — 공장이 선택할 때까지 기다리시면 됩니다';
+    if (myApplication?.status === 'rejected') return '다른 기사로 확정된 일감입니다';
+    if (isMyDirectRequest) return '👇 아래에서 [수락] 또는 [거절]을 선택하세요';
+    if (isMyJob && job.status === 'accepted') return '⏳ 공장 확정 대기 — 따로 할 일이 없습니다';
+    if (isMyJob && job.status === 'confirmed') return '📍 현장에 도착하면 [체크인]을 누르세요';
+    if (isMyJob && job.status === 'checked_in') return '🔧 작업이 끝나면 [체크아웃]을 누르세요';
+    if (isMyJob && job.status === 'completed') return '💰 수금 확인은 [정산] 탭에서 할 수 있습니다';
+    if (isMyJob && job.status === 'paid') return '✅ 수금까지 완료된 거래입니다';
+    return null;
+  })();
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={{ padding: SPACING.lg }}>
@@ -107,8 +122,16 @@ export default function JobDetail() {
         </Pressable>
 
         <View style={styles.statusBadge}>
-          <Text style={styles.statusBadgeText}>{STATUS_LABEL[job.status]}</Text>
+          <Text style={styles.statusBadgeText}>
+            {isOpenRecruiting ? '공개 모집 중' : STATUS_LABEL[job.status]}
+          </Text>
         </View>
+
+        {guide && (
+          <View style={styles.guideBox}>
+            <Text style={styles.guideText}>{guide}</Text>
+          </View>
+        )}
 
         <Text style={styles.factory}>{job.factoryName}</Text>
         <Text style={styles.process}>{PROCESS_LABEL[job.process]}</Text>
@@ -198,6 +221,15 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   statusBadgeText: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted },
+  guideBox: {
+    marginTop: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#FFF8E1',
+    borderWidth: 1,
+    borderColor: '#FFE082',
+  },
+  guideText: { fontSize: FONT_SIZE.body, fontWeight: '600', color: COLORS.text },
   factory: { marginTop: SPACING.md, fontSize: FONT_SIZE.display, fontWeight: '700', color: COLORS.text },
   process: { marginTop: 4, fontSize: FONT_SIZE.title, color: COLORS.textMuted },
   divider: { height: 1, backgroundColor: COLORS.border, marginVertical: SPACING.lg },

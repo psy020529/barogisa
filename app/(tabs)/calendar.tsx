@@ -6,7 +6,7 @@ import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONT_SIZE, PROCESS_LABEL, RADIUS, SCHEDULE_COLORS, SPACING, STATUS_LABEL } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
-import { useDriverJobs } from '@/hooks/useJobs';
+import { useDriverJobs, useMyApplications, useOpenJobs } from '@/hooks/useJobs';
 import type { Job, JobStatus } from '@/types';
 import { formatCurrencyShort } from '@/utils/format';
 
@@ -21,7 +21,11 @@ function colorForStatus(status: JobStatus): string {
 export default function CalendarScreen() {
   const { user } = useAuth();
   const jobs = useDriverJobs(user?.id);
+  const openJobs = useOpenJobs(); // 모집 중인 공개 일감 — 캘린더에서도 탐색 가능 (보라 점)
+  const myApps = useMyApplications(user?.id);
   const [selected, setSelected] = useState<string>(todayIso());
+
+  const appliedJobIds = useMemo(() => new Set(myApps.map((a) => a.jobId)), [myApps]);
 
   const markedDates = useMemo(() => {
     const result: Record<string, { dots: { color: string }[]; selected?: boolean; selectedColor?: string }> = {};
@@ -29,10 +33,48 @@ export default function CalendarScreen() {
       if (!result[job.date]) result[job.date] = { dots: [] };
       result[job.date].dots.push({ color: colorForStatus(job.status) });
     });
+    openJobs.forEach((job) => {
+      if (!result[job.date]) result[job.date] = { dots: [] };
+      result[job.date].dots.push({ color: SCHEDULE_COLORS.open });
+    });
     if (!result[selected]) result[selected] = { dots: [] };
     result[selected] = { ...result[selected], selected: true, selectedColor: COLORS.primary };
     return result;
-  }, [jobs, selected]);
+  }, [jobs, openJobs, selected]);
+
+  // 지금 할 일 안내 배너 — 가장 급한 액션 하나만
+  const banner = useMemo(() => {
+    const today = todayIso();
+    const newRequests = jobs.filter((j) => j.status === 'requested');
+    if (newRequests.length > 0) {
+      return {
+        text: `🔴 새 일감 ${newRequests.length}건 — 수락/거절을 결정하세요`,
+        onPress: () => router.push(`/job/${newRequests[0].id}`),
+      };
+    }
+    const checkedIn = jobs.find((j) => j.status === 'checked_in');
+    if (checkedIn) {
+      return {
+        text: '🔵 진행 중인 시공 — 작업이 끝나면 체크아웃하세요',
+        onPress: () => router.push(`/job/${checkedIn.id}`),
+      };
+    }
+    const todayConfirmed = jobs.find((j) => j.status === 'confirmed' && j.date === today);
+    if (todayConfirmed) {
+      return {
+        text: '🔵 오늘 시공 일정 — 현장 도착하면 체크인하세요',
+        onPress: () => router.push(`/job/${todayConfirmed.id}`),
+      };
+    }
+    const applyable = openJobs.filter((j) => !appliedJobIds.has(j.id));
+    if (applyable.length > 0) {
+      return {
+        text: `🟣 모집 중인 일감 ${applyable.length}건 — 지원해보세요`,
+        onPress: () => setSelected(applyable[0].date),
+      };
+    }
+    return null;
+  }, [jobs, openJobs, appliedJobIds]);
 
   const summary = useMemo(() => {
     const now = new Date();
@@ -55,6 +97,7 @@ export default function CalendarScreen() {
   }, [jobs]);
 
   const dayJobs = jobs.filter((j) => j.date === selected);
+  const dayOpenJobs = openJobs.filter((j) => j.date === selected);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -64,6 +107,13 @@ export default function CalendarScreen() {
           <SummaryCell label="미수금" value={`${formatCurrencyShort(summary.unpaid)}원`} accent={COLORS.danger} />
           <SummaryCell label="이번주 일감" value={`${summary.weekCount}건`} accent={COLORS.primary} />
         </View>
+
+        {banner && (
+          <Pressable style={styles.banner} onPress={banner.onPress}>
+            <Text style={styles.bannerText}>{banner.text}</Text>
+            <Text style={styles.bannerArrow}>›</Text>
+          </Pressable>
+        )}
 
         <Calendar
           current={selected}
@@ -81,13 +131,23 @@ export default function CalendarScreen() {
           <Legend color={SCHEDULE_COLORS.newJob} label="신규" />
           <Legend color={SCHEDULE_COLORS.pending} label="수락(확정 대기)" />
           <Legend color={SCHEDULE_COLORS.myJob} label="확정/진행/완료" />
+          <Legend color={SCHEDULE_COLORS.open} label="모집중" />
         </View>
 
-        <Text style={styles.dayHeader}>{selected} 일정 ({dayJobs.length}건)</Text>
-        {dayJobs.length === 0 ? (
+        <Text style={styles.dayHeader}>
+          {selected} 일정 ({dayJobs.length + dayOpenJobs.length}건)
+        </Text>
+        {dayJobs.length === 0 && dayOpenJobs.length === 0 ? (
           <Text style={styles.empty}>일정이 없습니다</Text>
         ) : (
-          dayJobs.map((job) => <JobRow key={job.id} job={job} />)
+          <>
+            {dayJobs.map((job) => (
+              <JobRow key={job.id} job={job} />
+            ))}
+            {dayOpenJobs.map((job) => (
+              <JobRow key={job.id} job={job} open applied={appliedJobIds.has(job.id)} />
+            ))}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -112,16 +172,20 @@ function Legend({ color, label }: { color: string; label: string }) {
   );
 }
 
-function JobRow({ job }: { job: Job }) {
+function JobRow({ job, open, applied }: { job: Job; open?: boolean; applied?: boolean }) {
+  const barColor = open ? SCHEDULE_COLORS.open : colorForStatus(job.status);
+  const statusText = open ? (applied ? '모집중 · 지원함 (선택 대기)' : '모집중 · 지원 가능') : STATUS_LABEL[job.status];
   return (
     <Pressable style={styles.jobRow} onPress={() => router.push(`/job/${job.id}`)}>
-      <View style={[styles.statusBar, { backgroundColor: colorForStatus(job.status) }]} />
+      <View style={[styles.statusBar, { backgroundColor: barColor }]} />
       <View style={{ flex: 1 }}>
         <Text style={styles.jobFactory}>{job.factoryName}</Text>
         <Text style={styles.jobMeta}>
           {PROCESS_LABEL[job.process]} · {job.address}
         </Text>
-        <Text style={styles.jobStatus}>{STATUS_LABEL[job.status]}</Text>
+        <Text style={[styles.jobStatus, open && { color: SCHEDULE_COLORS.open, fontWeight: '600' }]}>
+          {statusText}
+        </Text>
       </View>
       <Text style={styles.jobAmount}>{formatCurrencyShort(job.amount)}원</Text>
     </Pressable>
@@ -145,6 +209,21 @@ const styles = StyleSheet.create({
   },
   summaryLabel: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted },
   summaryValue: { marginTop: 4, fontSize: FONT_SIZE.title, fontWeight: '700', color: COLORS.text },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#FFF8E1',
+    borderWidth: 1,
+    borderColor: '#FFE082',
+  },
+  bannerText: { flex: 1, fontSize: FONT_SIZE.body, fontWeight: '600', color: COLORS.text },
+  bannerArrow: { fontSize: FONT_SIZE.heading, color: COLORS.textMuted, marginLeft: SPACING.sm },
   legendRow: { flexDirection: 'row', gap: SPACING.md, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   dot: { width: 8, height: 8, borderRadius: 4 },

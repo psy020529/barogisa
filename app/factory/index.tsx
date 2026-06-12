@@ -20,6 +20,18 @@ export default function FactoryHome() {
   const factory = useMyFactory(user?.id, user?.name);
   const jobs = useFactoryJobs(factory.factoryId ?? undefined);
 
+  // 지금 할 일 안내 — 가장 급한 액션 하나만
+  const openRecruiting = jobs.filter(
+    (j) => j.listingType === 'open' && !j.driverId && j.status === 'requested',
+  );
+  const awaitingConfirm = jobs.filter((j) => j.status === 'accepted');
+  const banner =
+    awaitingConfirm.length > 0
+      ? `🟠 기사 수락 ${awaitingConfirm.length}건 — [최종 확정]을 눌러 거래를 성사시키세요`
+      : openRecruiting.length > 0
+        ? `🟣 공개 모집 ${openRecruiting.length}건 진행 중 — [지원자 보기]에서 기사를 선택하세요`
+        : null;
+
   const handleSignOut = async () => {
     await signOut();
     router.replace('/');
@@ -68,8 +80,13 @@ export default function FactoryHome() {
       </Pressable>
 
       <ScrollView contentContainerStyle={{ padding: SPACING.md }}>
+        {banner && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>{banner}</Text>
+          </View>
+        )}
         {jobs.length === 0 && !factory.loading && (
-          <Text style={styles.empty}>발주한 일감이 없습니다.</Text>
+          <Text style={styles.empty}>발주한 일감이 없습니다. [＋ 새 일감 발주]로 시작하세요.</Text>
         )}
         {jobs.map((job) => {
           const isOpenRecruiting =
@@ -126,6 +143,15 @@ const styles = StyleSheet.create({
   ctaDisabled: { opacity: 0.5 },
   ctaText: { color: '#fff', fontSize: FONT_SIZE.title, fontWeight: '700' },
   empty: { textAlign: 'center', padding: SPACING.xl, color: COLORS.textMuted },
+  banner: {
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#FFF8E1',
+    borderWidth: 1,
+    borderColor: '#FFE082',
+    marginBottom: SPACING.sm,
+  },
+  bannerText: { fontSize: FONT_SIZE.body, fontWeight: '600', color: COLORS.text },
   card: {
     flexDirection: 'row',
     marginBottom: SPACING.sm,
