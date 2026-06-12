@@ -1,13 +1,27 @@
 import { router } from 'expo-router';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import DaumPostcode from '@/components/DaumPostcode';
 import { COLORS, FONT_SIZE, PROCESS_LABEL, RADIUS, SPACING } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
+import { searchAddress } from '@/services/naver';
 import type { DriverJobType } from '@/types';
 
-const JOB_TYPES: DriverJobType[] = ['installation', 'cutting', 'assembly', 'cleaning', 'faucet', 'delivery'];
+// 베타 직군: 시공·재단·조립만 (청소/수전/용달은 추후)
+const JOB_TYPES: DriverJobType[] = ['installation', 'cutting', 'assembly'];
 
 export default function ProfileScreen() {
-  const { user, signOut, deleteAccount, updateDriverJobType } = useAuth();
+  const { user, signOut, deleteAccount, updateDriverJobType, updateStartLocation } = useAuth();
+
+  // 출발지 선택 → 좌표 변환 → 저장 (장거리 판정 기준점)
+  const changeStartLocation = async (roadAddress: string) => {
+    try {
+      const found = await searchAddress(roadAddress);
+      if (found.length === 0) throw new Error('주소의 좌표를 찾을 수 없습니다');
+      await updateStartLocation(roadAddress, found[0].lat, found[0].lon);
+    } catch (e) {
+      Alert.alert('저장 실패', e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const changeJobType = async (jobType: DriverJobType) => {
     if (jobType === user?.driverProfile?.jobType) return;
@@ -48,6 +62,17 @@ export default function ProfileScreen() {
       <Text style={styles.row}>역할: {user?.role ?? '-'}</Text>
       <Text style={styles.row}>전화: {user?.phone ?? '-'}</Text>
       {user?.isAdmin && <Text style={[styles.row, { color: COLORS.primary }]}>관리자 권한</Text>}
+
+      {user?.role === 'driver' && (
+        <View style={styles.jobTypeBox}>
+          <Text style={styles.jobTypeLabel}>출발지 (장거리 판정 기준)</Text>
+          <DaumPostcode
+            value={user?.driverProfile?.startAddress ?? ''}
+            placeholder="출발지 주소 검색"
+            onComplete={(r) => changeStartLocation(r.roadAddress)}
+          />
+        </View>
+      )}
 
       {user?.role === 'driver' && (
         <View style={styles.jobTypeBox}>

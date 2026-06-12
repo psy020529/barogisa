@@ -1,11 +1,12 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, FONT_SIZE, PROCESS_LABEL, RADIUS, SPACING, STATUS_LABEL } from '@/constants';
+import { COLORS, FONT_SIZE, LONG_DISTANCE_SURCHARGE, PROCESS_LABEL, RADIUS, SPACING, STATUS_LABEL } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useDriverJobs, useJob, useMyApplications } from '@/hooks/useJobs';
 import { applyToJob, updateJobStatus } from '@/services/jobsApi';
+import { travelFromAddress, type Travel } from '@/services/naver';
 import { formatCurrency } from '@/utils/format';
 
 export default function JobDetail() {
@@ -15,6 +16,21 @@ export default function JobDetail() {
   const allJobs = useDriverJobs(user?.id);
   const myApps = useMyApplications(user?.id);
   const [applying, setApplying] = useState(false);
+  const [travel, setTravel] = useState<Travel | null>(null);
+
+  // 내 출발지(프로필) → 현장 거리 — 지원/수락 판단 정보 (장거리 판정은 기사 기준)
+  const startLat = user?.driverProfile?.startLat;
+  const startLon = user?.driverProfile?.startLon;
+  useEffect(() => {
+    if (!job?.address || startLat == null || startLon == null) return;
+    let cancelled = false;
+    travelFromAddress({ lat: startLat, lon: startLon }, job.address)
+      .then((t) => { if (!cancelled) setTravel(t); })
+      .catch((e) => console.warn('travel calc failed:', e));
+    return () => {
+      cancelled = true;
+    };
+  }, [job?.address, startLat, startLon]);
 
   if (!job) {
     return (
@@ -141,7 +157,21 @@ export default function JobDetail() {
         <InfoRow label="시공 날짜" value={job.date} />
         <InfoRow label="주소" value={job.address} />
         <InfoRow label="단가" value={formatCurrency(job.amount)} />
-        {job.longDistance && <InfoRow label="장거리" value="추가요금 적용" />}
+        {travel && (
+          <InfoRow
+            label="내 출발지에서"
+            value={`약 ${travel.km}km · 차로 ${travel.minutes}분${
+              travel.longDistance
+                ? ` · 장거리 (+${LONG_DISTANCE_SURCHARGE.toLocaleString()}원 협의)`
+                : ''
+            }`}
+          />
+        )}
+        {!travel && user?.role === 'driver' && !user?.driverProfile?.startAddress && (
+          <Text style={styles.travelHint}>
+            프로필에서 출발지를 등록하면 현장까지 거리·장거리 여부를 보여드립니다
+          </Text>
+        )}
         {job.notes && <InfoRow label="비고" value={job.notes} />}
 
         {sameDayConfirmed && job.status === 'requested' && (
@@ -236,6 +266,11 @@ const styles = StyleSheet.create({
   infoRow: { flexDirection: 'row', paddingVertical: SPACING.sm },
   infoLabel: { width: 100, fontSize: FONT_SIZE.body, color: COLORS.textMuted },
   infoValue: { flex: 1, fontSize: FONT_SIZE.body, color: COLORS.text },
+  travelHint: {
+    fontSize: FONT_SIZE.caption,
+    color: COLORS.textLight,
+    paddingVertical: SPACING.sm,
+  },
   warningBox: {
     marginTop: SPACING.lg,
     padding: SPACING.md,

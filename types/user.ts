@@ -16,6 +16,10 @@ export interface DriverProfile {
   jobType: DriverJobType;
   tier?: DriverTier;
   region?: string;
+  // 출발지 — 장거리 판정 기준점 (기사 출발지 → 현장 거리)
+  startAddress?: string;
+  startLat?: number;
+  startLon?: number;
 }
 
 export interface FactoryProfile {

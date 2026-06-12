@@ -15,6 +15,7 @@ type AuthContextValue = {
   signInWithKakao: () => Promise<void>;
   completeOnboarding: (input: OnboardingInput) => Promise<void>;
   updateDriverJobType: (jobType: DriverJobType) => Promise<void>;
+  updateStartLocation: (address: string, lat: number, lon: number) => Promise<void>;
   // dev: Supabase 미설정 시 mock 진입용
   devSignIn: (mockUser: User) => void;
   signOut: () => Promise<void>;
@@ -112,6 +113,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('authenticated');
   }
 
+  // 출발지 변경 (장거리 판정 기준점)
+  async function updateStartLocation(address: string, lat: number, lon: number) {
+    if (!authUserId) throw new Error('인증된 사용자가 없습니다');
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from('users')
+      .update({ start_address: address, start_lat: lat, start_lon: lon })
+      .eq('id', authUserId)
+      .select()
+      .single();
+    if (error) throw error;
+    setUser(rowToUser(data));
+  }
+
   // 직군 변경 (공개 일감 추천 매칭의 키)
   async function updateDriverJobType(jobType: DriverJobType) {
     if (!authUserId) throw new Error('인증된 사용자가 없습니다');
@@ -163,7 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ status, user, authUserId, signInWithKakao, completeOnboarding, updateDriverJobType, devSignIn, signOut, deleteAccount }}
+      value={{ status, user, authUserId, signInWithKakao, completeOnboarding, updateDriverJobType, updateStartLocation, devSignIn, signOut, deleteAccount }}
     >
       {children}
     </AuthContext.Provider>
@@ -177,6 +192,9 @@ type UserRow = {
   phone: string | null;
   driver_job_type: string | null;
   driver_tier: string | null;
+  start_address: string | null;
+  start_lat: number | null;
+  start_lon: number | null;
   factory_id: string | null;
   push_token: string | null;
   is_admin: boolean | null;
@@ -194,6 +212,9 @@ function rowToUser(row: UserRow): User {
         ? {
             jobType: (row.driver_job_type as DriverJobType) ?? 'installation',
             tier: (row.driver_tier as DriverTier) ?? undefined,
+            startAddress: row.start_address ?? undefined,
+            startLat: row.start_lat ?? undefined,
+            startLon: row.start_lon ?? undefined,
           }
         : undefined,
     factoryProfile: row.role === 'factory' ? { factoryId: row.factory_id ?? row.id } : undefined,

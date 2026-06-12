@@ -10,9 +10,8 @@ const NAVER_CLIENT_SECRET = process.env.EXPO_PUBLIC_NAVER_CLIENT_SECRET;
 
 export const hasNaverConfig = Boolean(NAVER_CLIENT_ID && NAVER_CLIENT_SECRET);
 
-// 도어링 공장 좌표 (dooring-admin FACTORY_LOCATION과 동일)
-export const FACTORY_LOCATION = { lat: 37.690124, lon: 127.201837 };
 // 이 거리 이상이면 장거리 (dooring-admin NEARBY_THRESHOLD_KM과 동일 기준)
+// 판정 기준점은 공장이 아니라 "시공 기사의 출발지" (프로필에서 등록)
 export const LONG_DISTANCE_KM = 30;
 
 const headers = () => ({
@@ -47,13 +46,16 @@ export async function searchAddress(query: string): Promise<AddressCandidate[]> 
     }));
 }
 
-export type FactoryTravel = { km: number; minutes: number; longDistance: boolean };
+export type Travel = { km: number; minutes: number; longDistance: boolean };
 
-// 공장 → 현장 자동차 경로 거리/시간 + 장거리 판정
-export async function travelFromFactory(goal: { lat: number; lon: number }): Promise<FactoryTravel> {
+// 출발지 → 목적지 자동차 경로 거리/시간 + 장거리 판정
+export async function travelBetween(
+  start: { lat: number; lon: number },
+  goal: { lat: number; lon: number },
+): Promise<Travel> {
   if (!hasNaverConfig) throw new Error('네이버 API 키가 설정되지 않았습니다 (.env)');
   const res = await fetch(
-    `https://maps.apigw.ntruss.com/map-direction/v1/driving?start=${FACTORY_LOCATION.lon},${FACTORY_LOCATION.lat}&goal=${goal.lon},${goal.lat}`,
+    `https://maps.apigw.ntruss.com/map-direction/v1/driving?start=${start.lon},${start.lat}&goal=${goal.lon},${goal.lat}`,
     { headers: headers() },
   );
   if (!res.ok) throw new Error(`경로 계산 실패 (${res.status})`);
@@ -63,4 +65,14 @@ export async function travelFromFactory(goal: { lat: number; lon: number }): Pro
   const km = Math.round((summary.distance / 1000) * 10) / 10;
   const minutes = Math.round(summary.duration / 1000 / 60);
   return { km, minutes, longDistance: km >= LONG_DISTANCE_KM };
+}
+
+// 기사 출발지 → 현장 주소(텍스트). 일감 상세에서 사용.
+export async function travelFromAddress(
+  start: { lat: number; lon: number },
+  goalAddress: string,
+): Promise<Travel> {
+  const found = await searchAddress(goalAddress);
+  if (found.length === 0) throw new Error('현장 주소의 좌표를 찾을 수 없습니다');
+  return travelBetween(start, { lat: found[0].lat, lon: found[0].lon });
 }

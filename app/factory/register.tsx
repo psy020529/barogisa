@@ -4,12 +4,11 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View 
 import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DaumPostcode from '@/components/DaumPostcode';
-import { COLORS, FONT_SIZE, LONG_DISTANCE_SURCHARGE, PROCESS_LABEL, RADIUS, SPACING, STANDARD_RATES } from '@/constants';
+import { COLORS, FONT_SIZE, PROCESS_LABEL, RADIUS, SPACING, STANDARD_RATES } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useJob } from '@/hooks/useJobs';
 import { useMyFactory } from '@/hooks/useMyFactory';
 import { createJob, updateJob } from '@/services/jobsApi';
-import { searchAddress, travelFromFactory, type FactoryTravel } from '@/services/naver';
 import { getSupabase, hasSupabaseConfig } from '@/services/supabase';
 import type { JobListingType, JobProcess } from '@/types';
 
@@ -35,8 +34,6 @@ export default function FactoryRegister() {
   const [process, setProcess] = useState<JobProcess>('installation');
   const [roadAddress, setRoadAddress] = useState('');
   const [detailAddress, setDetailAddress] = useState('');
-  const [travel, setTravel] = useState<FactoryTravel | null>(null);
-  const [addrError, setAddrError] = useState<string | null>(null);
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [driverId, setDriverId] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
@@ -82,25 +79,9 @@ export default function FactoryRegister() {
     };
   }, [user?.id]);
 
-  // 장거리는 수동 토글 대신 공장~현장 경로 거리(네이버 Directions)로 자동 판정
-  const isLongDistance = travel?.longDistance ?? false;
-  const amount = STANDARD_RATES[process] + (isLongDistance ? LONG_DISTANCE_SURCHARGE : 0);
+  // 장거리 판정은 발주가 아니라 기사 출발지 기준 (일감 상세에서 기사에게 표시)
+  const amount = STANDARD_RATES[process];
   const finalAmount = amountOverride ? Number(amountOverride.replace(/[^0-9]/g, '')) : amount;
-
-  // Daum 우편번호로 도로명 선택 → 네이버 geocoding으로 좌표 → 공장 거리 자동 계산
-  const onPostcodeComplete = async (roadAddr: string) => {
-    setRoadAddress(roadAddr);
-    setTravel(null);
-    setAddrError(null);
-    try {
-      const found = await searchAddress(roadAddr);
-      if (found.length === 0) throw new Error('좌표를 찾을 수 없습니다');
-      setTravel(await travelFromFactory({ lat: found[0].lat, lon: found[0].lon }));
-    } catch (e) {
-      // 거리 계산 실패는 발주를 막지 않는다 — 장거리 미적용으로 진행
-      setAddrError(`거리 계산 실패: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  };
 
   const submit = async () => {
     if (!user) {
@@ -135,8 +116,6 @@ export default function FactoryRegister() {
           address: fullAddress,
           amount: finalAmount,
           notes: notes.trim() || undefined,
-          // 장거리는 주소를 다시 검색해 거리를 계산한 경우에만 갱신
-          ...(travel ? { longDistance: travel.longDistance } : {}),
           // 기사 변경은 지명 발주에서만 (공개 모집 건은 선택 흐름으로 배정)
           ...(listingType === 'direct' && driver ? { driverId: driver.id } : {}),
         });
@@ -159,7 +138,6 @@ export default function FactoryRegister() {
         process,
         address: fullAddress,
         amount: finalAmount,
-        longDistance: isLongDistance || undefined,
         notes: notes.trim() || undefined,
       });
       Alert.alert(
@@ -265,7 +243,7 @@ export default function FactoryRegister() {
           <DaumPostcode
             value={roadAddress}
             placeholder="주소 검색 — 건물명·지번·도로명"
-            onComplete={(r) => onPostcodeComplete(r.roadAddress)}
+            onComplete={(r) => setRoadAddress(r.roadAddress)}
           />
           <TextInput
             style={[styles.input, { marginTop: SPACING.xs }]}
@@ -273,17 +251,6 @@ export default function FactoryRegister() {
             onChangeText={setDetailAddress}
             placeholder="상세주소 (예: 101동 501호)"
           />
-          {addrError && <Text style={styles.addrError}>{addrError}</Text>}
-          {travel && (
-            <View style={styles.travelBox}>
-              <Text style={styles.travelText}>
-                공장에서 약 {travel.km}km · 차로 {travel.minutes}분
-                {travel.longDistance
-                  ? ` · 장거리 (+${LONG_DISTANCE_SURCHARGE.toLocaleString()}원 반영)`
-                  : ' · 근거리'}
-              </Text>
-            </View>
-          )}
         </Field>
 
         {listingType === 'direct' && (
