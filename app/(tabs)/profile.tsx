@@ -59,7 +59,9 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>내 정보</Text>
       <Text style={styles.row}>이름: {user?.name ?? '-'}</Text>
-      <Text style={styles.row}>역할: {user?.role ?? '-'}</Text>
+      <Text style={styles.row}>
+        역할: {user?.role === 'driver' ? '시공기사' : user?.role === 'factory' ? '공장' : '-'}
+      </Text>
       <Text style={styles.row}>전화: {user?.phone ?? '-'}</Text>
       {user?.isAdmin && <Text style={[styles.row, { color: COLORS.primary }]}>관리자 권한</Text>}
 
