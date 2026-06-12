@@ -28,7 +28,7 @@ export default function FactoryRegister() {
   const isEdit = Boolean(jobId);
   const prefilled = useRef(false);
 
-  const [listingType, setListingType] = useState<JobListingType>('direct');
+  const [listingType, setListingType] = useState<JobListingType>('open');
   const [date, setDate] = useState(todayIso());
   const [showCalendar, setShowCalendar] = useState(false);
   const [process, setProcess] = useState<JobProcess>('installation');
@@ -175,19 +175,19 @@ export default function FactoryRegister() {
         <Field label="모집 방식">
           <View style={styles.row}>
             <Pressable
-              style={[styles.chip, listingType === 'direct' && styles.chipActive]}
-              onPress={() => setListingType('direct')}
-            >
-              <Text style={[styles.chipText, listingType === 'direct' && styles.chipTextActive]}>
-                기사 지명
-              </Text>
-            </Pressable>
-            <Pressable
               style={[styles.chip, listingType === 'open' && styles.chipActive]}
               onPress={() => setListingType('open')}
             >
               <Text style={[styles.chipText, listingType === 'open' && styles.chipTextActive]}>
                 공개 모집
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.chip, listingType === 'direct' && styles.chipActive]}
+              onPress={() => setListingType('direct')}
+            >
+              <Text style={[styles.chipText, listingType === 'direct' && styles.chipTextActive]}>
+                기사 지명
               </Text>
             </Pressable>
           </View>
