@@ -281,7 +281,7 @@ export default function JobDetail() {
             )}
 
             <Pressable
-              style={[styles.btn, styles.btnPrimary, { marginTop: SPACING.lg }, applying && { opacity: 0.6 }]}
+              style={[styles.modalSubmit, applying && { opacity: 0.6 }]}
               onPress={doApply}
               disabled={applying}
             >
@@ -356,6 +356,13 @@ const styles = StyleSheet.create({
   modalTravelText: { fontSize: FONT_SIZE.caption, color: COLORS.primary, fontWeight: '600' },
   modalHint: { fontSize: FONT_SIZE.caption, color: COLORS.textLight, marginTop: SPACING.sm },
   modalWarn: { fontSize: FONT_SIZE.caption, color: COLORS.warning, fontWeight: '600', marginTop: SPACING.md },
+  modalSubmit: {
+    marginTop: SPACING.lg,
+    paddingVertical: SPACING.lg,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+  },
   warningBox: {
     marginTop: SPACING.lg,
     padding: SPACING.md,
