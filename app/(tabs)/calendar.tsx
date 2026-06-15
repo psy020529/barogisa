@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, FONT_SIZE, JOB_COLORS, PROCESS_LABEL, RADIUS, SPACING } from '@/constants';
+import { COLORS, FONT_SIZE, JOB_COLORS, JOB_STATUS_TONE, JOB_SURFACE, PROCESS_LABEL, RADIUS, SPACING, type JobTone } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useDriverJobs, useMyApplications, useOpenJobs } from '@/hooks/useJobs';
 import type { Job } from '@/types';
@@ -12,36 +12,29 @@ import { formatCurrencyShort } from '@/utils/format';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
-// 일감 상태 4색은 디자인 토큰(JOB_COLORS)에서 가져온다 (docs/DESIGN.md)
-const C = JOB_COLORS;
+// 상태별 라벨 (색은 tone → JOB_COLORS, docs/DESIGN.md)
+const MY_JOB_LABEL: Record<string, string> = {
+  requested: '신규 지명 · 수락 필요',
+  accepted: '수락함 · 공장 확정 대기',
+  confirmed: '확정',
+  checked_in: '시공 중',
+  completed: '완료',
+  paid: '수금 완료',
+};
 
-type Slot = { job: Job; color: string; label: string };
+type Slot = { job: Job; tone: JobTone; label: string };
 
 // 나에게 배정된 일감(지명 수락/확정/진행/완료)
 function myJobSlot(job: Job): Slot | null {
-  switch (job.status) {
-    case 'requested':
-      return { job, color: C.new, label: '신규 지명 · 수락 필요' };
-    case 'accepted':
-      return { job, color: C.wait, label: '수락함 · 공장 확정 대기' };
-    case 'confirmed':
-      return { job, color: C.active, label: '확정' };
-    case 'checked_in':
-      return { job, color: C.active, label: '시공 중' };
-    case 'completed':
-      return { job, color: C.done, label: '완료' };
-    case 'paid':
-      return { job, color: C.done, label: '수금 완료' };
-    default:
-      return null; // rejected/cancelled 는 캘린더에서 숨김
-  }
+  if (job.status === 'rejected' || job.status === 'cancelled') return null;
+  return { job, tone: JOB_STATUS_TONE[job.status], label: MY_JOB_LABEL[job.status] ?? '' };
 }
 
 // 공개 모집 일감 (driver_id 미정)
 function openSlot(job: Job, applied: boolean): Slot {
   return applied
-    ? { job, color: C.wait, label: '지원함 · 선택 대기' }
-    : { job, color: C.new, label: '지원 가능' };
+    ? { job, tone: 'wait', label: '지원함 · 선택 대기' }
+    : { job, tone: 'new', label: '지원 가능' };
 }
 
 export default function CalendarScreen() {
@@ -106,9 +99,9 @@ export default function CalendarScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={{ paddingBottom: SPACING.xl }}>
         <View style={styles.summaryRow}>
-          <SummaryCell label="이번달 수익" value={`${formatCurrencyShort(summary.monthIncome)}원`} accent={C.done} />
-          <SummaryCell label="미수금" value={`${formatCurrencyShort(summary.unpaid)}원`} accent={C.new} />
-          <SummaryCell label="이번주 일감" value={`${summary.weekCount}건`} accent={C.active} />
+          <SummaryCell label="이번달 수익" value={`${formatCurrencyShort(summary.monthIncome)}원`} accent={JOB_COLORS.done} />
+          <SummaryCell label="미수금" value={`${formatCurrencyShort(summary.unpaid)}원`} accent={JOB_COLORS.new} />
+          <SummaryCell label="이번주 일감" value={`${summary.weekCount}건`} accent={JOB_COLORS.active} />
         </View>
 
         {banner && (
@@ -144,10 +137,10 @@ export default function CalendarScreen() {
         </View>
 
         <View style={styles.legendRow}>
-          <Legend color={C.new} label="신규·지원가능" />
-          <Legend color={C.wait} label="대기" />
-          <Legend color={C.active} label="확정·진행" />
-          <Legend color={C.done} label="완료" />
+          <Legend color={JOB_COLORS.new} label="신규·지원가능" />
+          <Legend color={JOB_COLORS.wait} label="대기" />
+          <Legend color={JOB_COLORS.active} label="확정·진행" />
+          <Legend color={JOB_COLORS.done} label="완료" />
         </View>
 
         <Text style={styles.dayHeader}>
@@ -204,7 +197,7 @@ function DayCell({
         <Text style={[styles.cellNum, { color: isToday ? '#fff' : numColor }]}>{day}</Text>
       </View>
       {shown.map((s, i) => (
-        <View key={i} style={[styles.cellBar, { backgroundColor: s.color }]}>
+        <View key={i} style={[styles.cellBar, { backgroundColor: JOB_COLORS[s.tone] }]}>
           <Text style={styles.cellBarText} numberOfLines={1}>
             {s.job.factoryName}
           </Text>
@@ -234,24 +227,26 @@ function Legend({ color, label }: { color: string; label: string }) {
 }
 
 function SlotRow({ slot }: { slot: Slot }) {
-  const { job, color, label } = slot;
+  const { job, tone, label } = slot;
+  const color = JOB_COLORS[tone];
   return (
-    <Pressable style={styles.jobRow} onPress={() => router.push(`/job/${job.id}`)}>
-      <View style={[styles.statusBar, { backgroundColor: color }]} />
-      <View style={{ flex: 1, padding: SPACING.md }}>
-        <View style={styles.jobTopRow}>
+    <Pressable
+      style={[styles.jobRow, { backgroundColor: JOB_SURFACE[tone] }]}
+      onPress={() => router.push(`/job/${job.id}`)}
+    >
+      <View style={styles.jobTopRow}>
+        <View style={styles.jobTitleWrap}>
+          <View style={[styles.toneDot, { backgroundColor: color }]} />
           <Text style={styles.jobFactory} numberOfLines={1}>
             {job.factoryName}
           </Text>
-          <View style={[styles.pill, { backgroundColor: color }]}>
-            <Text style={styles.pillText}>{label}</Text>
-          </View>
         </View>
-        <Text style={styles.jobMeta} numberOfLines={1}>
-          {PROCESS_LABEL[job.process]} · {job.address}
-        </Text>
-        <Text style={styles.jobAmount}>{formatCurrencyShort(job.amount)}원</Text>
+        <Text style={[styles.jobLabel, { color }]}>{label}</Text>
       </View>
+      <Text style={styles.jobMeta} numberOfLines={1}>
+        {PROCESS_LABEL[job.process]} · {job.address}
+      </Text>
+      <Text style={styles.jobAmount}>{formatCurrencyShort(job.amount)}원</Text>
     </Pressable>
   );
 }
@@ -319,18 +314,16 @@ const styles = StyleSheet.create({
   },
   empty: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.lg, color: COLORS.textMuted, textAlign: 'center' },
   jobRow: {
-    flexDirection: 'row',
     marginHorizontal: SPACING.md,
     marginBottom: SPACING.sm,
-    backgroundColor: COLORS.card,
+    padding: SPACING.md,
     borderRadius: RADIUS.md,
-    overflow: 'hidden',
   },
-  statusBar: { width: 5, alignSelf: 'stretch' },
   jobTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.sm },
+  jobTitleWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  toneDot: { width: 10, height: 10, borderRadius: 5 },
   jobFactory: { flex: 1, fontSize: FONT_SIZE.title, fontWeight: '700', color: COLORS.text },
-  pill: { paddingHorizontal: SPACING.sm, paddingVertical: 2, borderRadius: 999 },
-  pillText: { fontSize: FONT_SIZE.caption, color: '#fff', fontWeight: '700' },
+  jobLabel: { fontSize: FONT_SIZE.caption, fontWeight: '700' },
   jobMeta: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, marginTop: 4 },
   jobAmount: { fontSize: FONT_SIZE.title, fontWeight: '700', color: COLORS.text, marginTop: 6 },
 });

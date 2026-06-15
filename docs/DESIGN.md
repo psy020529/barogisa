@@ -92,8 +92,11 @@
 
 ## 6. 컴포넌트 패턴
 
-- **카드**: `surface` 배경 + `RADIUS.md`. 상태가 있으면 좌측 색 바(`width:5`, `JOB_COLORS`).
-- **상태 pill**: `RADIUS.pill` + 상태색 배경 + `textInverse` `caption` `bold`.
+- **상태 카드(일감)**: 좌측 색 바 ❌. 대신 **카드 전체를 상태색으로 은은히 틴트**(`JOB_SURFACE[tone]`)
+  + 제목 앞 **색 점**(`toneDot` 10×10, `JOB_COLORS[tone]`) + 우측 상태 라벨(작은 글씨, 상태색).
+  (TimeBlocks 방식 — 면으로 색을 주고 점/텍스트로 강조)
+- **일반 카드**: `surface` 배경 + `RADIUS.md`.
+- **상태 pill**: 필요 시 `RADIUS.pill` + 상태색 배경 + `textInverse`. (일감 카드엔 점+라벨을 우선)
 - **안내 배너**: `warningSurface`+`warningBorder`, 좌측 이모지 신호(🔴🟡🔵), 우측 `›`. 화면당 **가장 급한 1건만**.
 - **기본 버튼**: `primary` 배경 / `textInverse` / `title` `bold` / 세로 패딩 `lg`. 비활성 `opacity 0.6`.
   - ⚠️ 가로 액션 행 전용 스타일(`flex:1`)을 세로 레이아웃(모달)에 재사용하면 높이가 붕괴한다 — 분리할 것.

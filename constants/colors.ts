@@ -84,6 +84,16 @@ export const JOB_COLORS = {
 
 export type JobTone = keyof typeof JOB_COLORS;
 
+// 상태색의 연한 틴트(8자리 hex 알파) — 어젠다 카드 배경 등 "색 블록"에 사용.
+// 얇은 좌측 바 대신 카드 전체를 은은하게 칠하는 TimeBlocks 방식.
+export const JOB_SURFACE: Record<JobTone, string> = {
+  new: COLORS.danger + '14', // ~8%
+  wait: COLORS.warning + '26', // 주황은 연하게 보여 조금 진하게
+  active: COLORS.primary + '14',
+  done: COLORS.success + '14',
+  inactive: COLORS.textLight + '14',
+};
+
 // 레거시 별칭 — 기존 import 호환용. 신규 코드는 JOB_COLORS 사용.
 export const SCHEDULE_COLORS = {
   myJob: JOB_COLORS.active,

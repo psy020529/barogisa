@@ -1,18 +1,18 @@
 import { router } from 'expo-router';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, FONT_SIZE, PROCESS_LABEL, RADIUS, SCHEDULE_COLORS, SPACING, STATUS_LABEL } from '@/constants';
+import { COLORS, FONT_SIZE, JOB_COLORS, JOB_STATUS_TONE, JOB_SURFACE, PROCESS_LABEL, RADIUS, SPACING, STATUS_LABEL, type JobTone } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useFactoryJobs } from '@/hooks/useJobs';
 import { useMyFactory } from '@/hooks/useMyFactory';
 import { updateJobStatus } from '@/services/jobsApi';
-import type { Job, JobStatus } from '@/types';
+import type { Job } from '@/types';
 import { formatCurrencyShort } from '@/utils/format';
 
-function colorForStatus(status: JobStatus): string {
-  if (status === 'requested') return SCHEDULE_COLORS.newJob;
-  if (status === 'accepted') return SCHEDULE_COLORS.pending;
-  return SCHEDULE_COLORS.myJob;
+// 공장 시점 색: 모집중/수락 = 내 행동 필요(노랑), 그 외는 상태 톤
+function factoryTone(job: Job, openRecruiting: boolean): JobTone {
+  if (openRecruiting || job.status === 'accepted') return 'wait';
+  return JOB_STATUS_TONE[job.status];
 }
 
 export default function FactoryHome() {
@@ -91,12 +91,15 @@ export default function FactoryHome() {
         {jobs.map((job) => {
           const isOpenRecruiting =
             job.listingType === 'open' && !job.driverId && job.status === 'requested';
+          const tone = factoryTone(job, isOpenRecruiting);
           return (
-            <View key={job.id} style={styles.card}>
-              <View style={[styles.statusBar, { backgroundColor: colorForStatus(job.status) }]} />
+            <View key={job.id} style={[styles.card, { backgroundColor: JOB_SURFACE[tone] }]}>
               <View style={{ flex: 1, padding: SPACING.md }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={styles.cardDate}>{job.date} · {PROCESS_LABEL[job.process]}</Text>
+                  <View style={styles.cardTitleWrap}>
+                    <View style={[styles.toneDot, { backgroundColor: JOB_COLORS[tone] }]} />
+                    <Text style={styles.cardDate}>{job.date} · {PROCESS_LABEL[job.process]}</Text>
+                  </View>
                   {job.status !== 'completed' && job.status !== 'paid' && job.status !== 'cancelled' && (
                     <Pressable
                       hitSlop={8}
@@ -163,13 +166,13 @@ const styles = StyleSheet.create({
   },
   bannerText: { fontSize: FONT_SIZE.body, fontWeight: '600', color: COLORS.text },
   card: {
-    flexDirection: 'row',
     marginBottom: SPACING.sm,
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.md,
     overflow: 'hidden',
   },
-  statusBar: { width: 4 },
+  cardTitleWrap: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flex: 1 },
+  toneDot: { width: 10, height: 10, borderRadius: 5 },
   cardDate: { fontSize: FONT_SIZE.title, fontWeight: '600', color: COLORS.text },
   editLink: { fontSize: FONT_SIZE.caption, color: COLORS.primary, fontWeight: '600' },
   cardAddr: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, marginTop: 2 },
