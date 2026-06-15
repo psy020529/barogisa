@@ -73,16 +73,6 @@ export default function CalendarScreen() {
     return map;
   }, [jobs, openJobs, appliedJobIds]);
 
-  const markedDates = useMemo(() => {
-    const result: Record<string, { dots: { key: string; color: string }[]; selected?: boolean; selectedColor?: string }> = {};
-    Object.entries(slotsByDate).forEach(([date, slots]) => {
-      // 같은 색은 한 점으로 합쳐 과밀 방지
-      const colors = Array.from(new Set(slots.map((s) => s.color)));
-      result[date] = { dots: colors.map((c, i) => ({ key: `${date}-${i}`, color: c })) };
-    });
-    result[selected] = { ...(result[selected] ?? { dots: [] }), selected: true, selectedColor: COLORS.primary };
-    return result;
-  }, [slotsByDate, selected]);
 
   // 지금 할 일 안내 배너 — 가장 급한 액션 하나만
   const banner = useMemo(() => {
@@ -137,17 +127,25 @@ export default function CalendarScreen() {
         <View style={styles.calendarCard}>
           <Calendar
             current={selected}
-            onDayPress={(d) => setSelected(d.dateString)}
-            markingType="multi-dot"
-            markedDates={markedDates}
             theme={{
-              todayTextColor: COLORS.primary,
-              selectedDayBackgroundColor: COLORS.primary,
-              selectedDayTextColor: '#fff',
               arrowColor: COLORS.primary,
               textMonthFontWeight: '700',
-              textDayFontWeight: '500',
+              monthTextColor: COLORS.text,
             }}
+            dayComponent={({ date, state }) =>
+              date ? (
+                <DayCell
+                  dateString={date.dateString}
+                  day={date.day}
+                  state={state}
+                  slots={slotsByDate[date.dateString] ?? []}
+                  isSelected={date.dateString === selected}
+                  onPress={setSelected}
+                />
+              ) : (
+                <View style={styles.cell} />
+              )
+            }
           />
         </View>
 
@@ -175,6 +173,52 @@ function formatDayHeader(iso: string) {
   const d = parseISO(iso);
   const dow = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
   return `${d.getMonth() + 1}월 ${d.getDate()}일 (${dow})`;
+}
+
+// TimeBlocks풍 날짜 셀 — 날짜 칸 안에 색 이벤트 바가 쌓인다
+function DayCell({
+  dateString,
+  day,
+  state,
+  slots,
+  isSelected,
+  onPress,
+}: {
+  dateString: string;
+  day: number;
+  state?: string;
+  slots: Slot[];
+  isSelected: boolean;
+  onPress: (d: string) => void;
+}) {
+  const isToday = state === 'today';
+  const disabled = state === 'disabled';
+  const dow = parseISO(dateString).getDay();
+  const numColor = disabled
+    ? COLORS.textLight
+    : dow === 0
+      ? '#E0524E'
+      : dow === 6
+        ? '#3B6FD4'
+        : COLORS.text;
+  const shown = slots.slice(0, 3);
+  const extra = slots.length - shown.length;
+
+  return (
+    <Pressable style={[styles.cell, isSelected && styles.cellSelected]} onPress={() => onPress(dateString)}>
+      <View style={[styles.cellNumWrap, isToday && styles.cellTodayNum]}>
+        <Text style={[styles.cellNum, { color: isToday ? '#fff' : numColor }]}>{day}</Text>
+      </View>
+      {shown.map((s, i) => (
+        <View key={i} style={[styles.cellBar, { backgroundColor: s.color }]}>
+          <Text style={styles.cellBarText} numberOfLines={1}>
+            {s.job.factoryName}
+          </Text>
+        </View>
+      ))}
+      {extra > 0 && <Text style={styles.cellMore}>+{extra}</Text>}
+    </Pressable>
+  );
 }
 
 function SummaryCell({ label, value, accent }: { label: string; value: string; accent: string }) {
@@ -247,6 +291,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  cell: {
+    width: '100%',
+    minHeight: 62,
+    paddingTop: 2,
+    paddingHorizontal: 1,
+    alignItems: 'stretch',
+  },
+  cellSelected: { backgroundColor: '#EAF2FB', borderRadius: RADIUS.sm },
+  cellNumWrap: { alignSelf: 'center', width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  cellTodayNum: { backgroundColor: COLORS.primary },
+  cellNum: { fontSize: 13, fontWeight: '600' },
+  cellBar: { borderRadius: 3, paddingHorizontal: 3, paddingVertical: 1, marginBottom: 2 },
+  cellBarText: { fontSize: 8, color: '#fff', fontWeight: '600' },
+  cellMore: { fontSize: 8, color: COLORS.textMuted, paddingLeft: 3 },
   legendRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
