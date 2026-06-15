@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "983155087529",
+    "project_id": "barogisa-7b59d",
+    "storage_bucket": "barogisa-7b59d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:983155087529:android:d2a4e91faa1318716c31b8",
+        "android_client_info": {
+          "package_name": "com.psy020529.barogisa"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCVNTrvluSTW6-plNsuIo2agWZ-j4hTrIQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
