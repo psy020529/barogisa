@@ -58,10 +58,15 @@
         "@react-native-kakao/core",
         {
           "nativeAppKey": "842f519b4be92460855eaa2e4fd95a56",
-          "android": { "authCodeHandlerActivity": true },
-          "ios": { "handleKakaoOpenUrl": true }
+          "android": {
+            "authCodeHandlerActivity": true
+          },
+          "ios": {
+            "handleKakaoOpenUrl": true
+          }
         }
       ]
-    ]
+    ],
+    "owner": "psy020529"
   }
 }
