@@ -1,7 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import DaumPostcode from '@/components/DaumPostcode';
-import { COLORS, FONT_SIZE, PROCESS_LABEL, RADIUS, SPACING } from '@/constants';
+import { COLORS, FONT_SIZE, FONT_WEIGHT, HIT_SLOP, PROCESS_LABEL, RADIUS, SPACING } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { searchAddress } from '@/services/naver';
 import type { DriverJobType } from '@/types';
@@ -11,8 +13,9 @@ const JOB_TYPES: DriverJobType[] = ['installation', 'cutting', 'assembly'];
 
 export default function ProfileScreen() {
   const { user, signOut, deleteAccount, updateDriverJobType, updateStartLocation } = useAuth();
+  const isDriver = user?.role === 'driver';
+  const roleLabel = user?.role === 'driver' ? '시공기사' : user?.role === 'factory' ? '공장' : '-';
 
-  // 출발지 선택 → 좌표 변환 → 저장 (장거리 판정 기준점)
   const changeStartLocation = async (roadAddress: string) => {
     try {
       const found = await searchAddress(roadAddress);
@@ -56,97 +59,175 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>내 정보</Text>
-      <Text style={styles.row}>이름: {user?.name ?? '-'}</Text>
-      <Text style={styles.row}>
-        역할: {user?.role === 'driver' ? '시공기사' : user?.role === 'factory' ? '공장' : '-'}
-      </Text>
-      <Text style={styles.row}>전화: {user?.phone ?? '-'}</Text>
-      {user?.isAdmin && <Text style={[styles.row, { color: COLORS.primary }]}>관리자 권한</Text>}
-
-      {user?.role === 'driver' && (
-        <View style={styles.jobTypeBox}>
-          <Text style={styles.jobTypeLabel}>출발지 (장거리 판정 기준)</Text>
-          <DaumPostcode
-            value={user?.driverProfile?.startAddress ?? ''}
-            placeholder="출발지 주소 검색"
-            onComplete={(r) => changeStartLocation(r.roadAddress)}
-          />
-        </View>
-      )}
-
-      {user?.role === 'driver' && (
-        <View style={styles.jobTypeBox}>
-          <Text style={styles.jobTypeLabel}>내 직군 (일감 추천 기준)</Text>
-          <View style={styles.jobTypeRow}>
-            {JOB_TYPES.map((t) => {
-              const active = user?.driverProfile?.jobType === t;
-              return (
-                <Pressable
-                  key={t}
-                  style={[styles.jobTypeChip, active && styles.jobTypeChipActive]}
-                  onPress={() => changeJobType(t)}
-                >
-                  <Text style={[styles.jobTypeChipText, active && styles.jobTypeChipTextActive]}>
-                    {PROCESS_LABEL[t]}
-                  </Text>
-                </Pressable>
-              );
-            })}
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView contentContainerStyle={{ paddingBottom: SPACING.xxl }}>
+        {/* 헤더 — 아바타 + 이름 + 역할 */}
+        <View style={styles.header}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{user?.name?.[0] ?? '?'}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.name}>{user?.name ?? '-'}</Text>
+            <View style={styles.badgeRow}>
+              <View style={styles.roleBadge}>
+                <Text style={styles.roleBadgeText}>{roleLabel}</Text>
+              </View>
+              {user?.isAdmin && (
+                <View style={[styles.roleBadge, styles.adminBadge]}>
+                  <Text style={[styles.roleBadgeText, styles.adminBadgeText]}>관리자</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.phone}>{user?.phone || '연락처 미등록'}</Text>
           </View>
         </View>
-      )}
 
-      {user?.isAdmin && (
-        <Pressable
-          style={[styles.button, { backgroundColor: COLORS.primary }]}
-          onPress={() => router.push('/factory')}
-        >
-          <Text style={styles.buttonText}>공장 화면 열기</Text>
+        {/* 기사 설정 */}
+        {isDriver && (
+          <>
+            <Text style={styles.sectionTitle}>일감 설정</Text>
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>출발지</Text>
+              <Text style={styles.fieldHint}>장거리 판정의 기준점이 됩니다</Text>
+              <DaumPostcode
+                value={user?.driverProfile?.startAddress ?? ''}
+                placeholder="출발지 주소 검색"
+                onComplete={(r) => changeStartLocation(r.roadAddress)}
+              />
+            </View>
+
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>내 직군</Text>
+              <Text style={styles.fieldHint}>이 직군의 공개 일감을 추천받습니다</Text>
+              <View style={styles.chipRow}>
+                {JOB_TYPES.map((t) => {
+                  const active = user?.driverProfile?.jobType === t;
+                  return (
+                    <Pressable
+                      key={t}
+                      style={[styles.chip, active && styles.chipActive]}
+                      onPress={() => changeJobType(t)}
+                    >
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{PROCESS_LABEL[t]}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </>
+        )}
+
+        {/* 계정 */}
+        <Text style={styles.sectionTitle}>계정</Text>
+        <View style={styles.listCard}>
+          {user?.isAdmin && (
+            <Row icon="business-outline" label="공장 화면 열기" onPress={() => router.push('/factory')} chevron />
+          )}
+          <Row icon="log-out-outline" label="로그아웃" onPress={handleSignOut} danger last={!user?.isAdmin} />
+        </View>
+
+        <Pressable hitSlop={HIT_SLOP} onPress={handleDeleteAccount} style={styles.deleteWrap}>
+          <Text style={styles.deleteText}>회원 탈퇴</Text>
         </Pressable>
-      )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
 
-      <Pressable style={[styles.button, { backgroundColor: COLORS.danger }]} onPress={handleSignOut}>
-        <Text style={styles.buttonText}>로그아웃</Text>
-      </Pressable>
-
-      <Pressable onPress={handleDeleteAccount}>
-        <Text style={styles.deleteText}>회원 탈퇴</Text>
-      </Pressable>
-    </View>
+function Row({
+  icon,
+  label,
+  onPress,
+  chevron,
+  danger,
+  last,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  chevron?: boolean;
+  danger?: boolean;
+  last?: boolean;
+}) {
+  const color = danger ? COLORS.danger : COLORS.text;
+  return (
+    <Pressable style={[styles.row, !last && styles.rowDivider]} onPress={onPress}>
+      <Ionicons name={icon} size={20} color={color} />
+      <Text style={[styles.rowLabel, { color }]}>{label}</Text>
+      {chevron && <Ionicons name="chevron-forward" size={18} color={COLORS.textLight} />}
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg, padding: SPACING.xl, gap: SPACING.sm },
-  title: { fontSize: FONT_SIZE.heading, fontWeight: '700', color: COLORS.text, marginBottom: SPACING.md },
-  row: { fontSize: FONT_SIZE.body, color: COLORS.text },
-  button: {
-    marginTop: SPACING.md,
-    paddingVertical: SPACING.md,
-    borderRadius: RADIUS.md,
+  container: { flex: 1, backgroundColor: COLORS.bg },
+
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: SPACING.lg,
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.xl,
   },
-  buttonText: { color: '#fff', fontSize: FONT_SIZE.title, fontWeight: '600' },
-  jobTypeBox: { marginTop: SPACING.md },
-  jobTypeLabel: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, marginBottom: SPACING.xs },
-  jobTypeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs },
-  jobTypeChip: {
-    paddingHorizontal: SPACING.md,
+  avatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: COLORS.primarySurface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { fontSize: FONT_SIZE.heading, fontWeight: FONT_WEIGHT.bold, color: COLORS.primary },
+  name: { fontSize: FONT_SIZE.heading, fontWeight: FONT_WEIGHT.bold, color: COLORS.text },
+  badgeRow: { flexDirection: 'row', gap: SPACING.xs, marginTop: SPACING.xs },
+  roleBadge: { paddingHorizontal: SPACING.sm, paddingVertical: 2, borderRadius: RADIUS.pill, backgroundColor: COLORS.surface },
+  roleBadgeText: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, fontWeight: FONT_WEIGHT.semibold },
+  adminBadge: { backgroundColor: COLORS.primarySurface },
+  adminBadgeText: { color: COLORS.primary },
+  phone: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, marginTop: SPACING.xs },
+
+  sectionTitle: {
+    fontSize: FONT_SIZE.caption,
+    fontWeight: FONT_WEIGHT.semibold,
+    color: COLORS.textMuted,
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.sm,
+  },
+
+  card: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    padding: SPACING.lg,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.sm,
+  },
+  fieldLabel: { fontSize: FONT_SIZE.body, fontWeight: FONT_WEIGHT.bold, color: COLORS.text },
+  fieldHint: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted, marginTop: 2, marginBottom: SPACING.sm },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs },
+  chip: {
+    paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
     borderRadius: RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.border,
+    backgroundColor: COLORS.bg,
   },
-  jobTypeChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  jobTypeChipText: { fontSize: FONT_SIZE.body, color: COLORS.text },
-  jobTypeChipTextActive: { color: '#fff', fontWeight: '600' },
-  deleteText: {
-    marginTop: SPACING.lg,
-    textAlign: 'center',
-    color: COLORS.textMuted,
-    fontSize: FONT_SIZE.caption,
-    textDecorationLine: 'underline',
+  chipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  chipText: { fontSize: FONT_SIZE.body, color: COLORS.text },
+  chipTextActive: { color: COLORS.textInverse, fontWeight: FONT_WEIGHT.semibold },
+
+  listCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    marginHorizontal: SPACING.lg,
+    overflow: 'hidden',
   },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.lg },
+  rowDivider: { borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  rowLabel: { flex: 1, fontSize: FONT_SIZE.title, fontWeight: FONT_WEIGHT.medium },
+
+  deleteWrap: { alignSelf: 'center', marginTop: SPACING.xl },
+  deleteText: { color: COLORS.textLight, fontSize: FONT_SIZE.caption, textDecorationLine: 'underline' },
 });
