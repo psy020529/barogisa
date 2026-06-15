@@ -156,9 +156,9 @@ const styles = StyleSheet.create({
   banner: {
     padding: SPACING.md,
     borderRadius: RADIUS.md,
-    backgroundColor: '#FFF8E1',
+    backgroundColor: COLORS.warningSurface,
     borderWidth: 1,
-    borderColor: '#FFE082',
+    borderColor: COLORS.warningBorder,
     marginBottom: SPACING.sm,
   },
   bannerText: { fontSize: FONT_SIZE.body, fontWeight: '600', color: COLORS.text },

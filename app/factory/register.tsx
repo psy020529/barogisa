@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
   editWarn: {
     padding: SPACING.md,
     borderRadius: RADIUS.md,
-    backgroundColor: '#FFF4E5',
+    backgroundColor: COLORS.warningSurface,
     marginBottom: SPACING.md,
   },
   editWarnText: { fontSize: FONT_SIZE.caption, color: COLORS.warning, fontWeight: '600' },
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
     padding: SPACING.sm,
     borderRadius: RADIUS.sm,
-    backgroundColor: '#EEF4FB',
+    backgroundColor: COLORS.infoSurface,
   },
   travelText: { fontSize: FONT_SIZE.caption, color: COLORS.primary, fontWeight: '600' },
   modalBackdrop: {

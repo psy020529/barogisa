@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, FONT_SIZE, PROCESS_LABEL, RADIUS, SCHEDULE_COLORS, SPACING } from '@/constants';
+import { COLORS, FONT_SIZE, JOB_COLORS, PROCESS_LABEL, RADIUS, SPACING } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useDriverJobs, useMyApplications, useOpenJobs } from '@/hooks/useJobs';
 import type { Job } from '@/types';
@@ -12,14 +12,8 @@ import { formatCurrencyShort } from '@/utils/format';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
-// 의미 중심 4색 — 빨강:신규/지원가능, 노랑:대기, 파랑:확정/진행, 초록:완료/수금
-const C = {
-  new: SCHEDULE_COLORS.newJob, // 빨강
-  wait: SCHEDULE_COLORS.pending, // 노랑(주황)
-  active: SCHEDULE_COLORS.myJob, // 파랑
-  done: SCHEDULE_COLORS.companyJob, // 초록
-  gray: COLORS.textLight,
-};
+// 일감 상태 4색은 디자인 토큰(JOB_COLORS)에서 가져온다 (docs/DESIGN.md)
+const C = JOB_COLORS;
 
 type Slot = { job: Job; color: string; label: string };
 
@@ -197,9 +191,9 @@ function DayCell({
   const numColor = disabled
     ? COLORS.textLight
     : dow === 0
-      ? '#E0524E'
+      ? COLORS.weekendSun
       : dow === 6
-        ? '#3B6FD4'
+        ? COLORS.weekendSat
         : COLORS.text;
   const shown = slots.slice(0, 3);
   const extra = slots.length - shown.length;
@@ -277,9 +271,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.md,
-    backgroundColor: '#FFF8E1',
+    backgroundColor: COLORS.warningSurface,
     borderWidth: 1,
-    borderColor: '#FFE082',
+    borderColor: COLORS.warningBorder,
   },
   bannerText: { flex: 1, fontSize: FONT_SIZE.body, fontWeight: '600', color: COLORS.text },
   bannerArrow: { fontSize: FONT_SIZE.heading, color: COLORS.textMuted, marginLeft: SPACING.sm },
@@ -298,7 +292,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 1,
     alignItems: 'stretch',
   },
-  cellSelected: { backgroundColor: '#EAF2FB', borderRadius: RADIUS.sm },
+  cellSelected: { backgroundColor: COLORS.primarySurface, borderRadius: RADIUS.sm },
   cellNumWrap: { alignSelf: 'center', width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
   cellTodayNum: { backgroundColor: COLORS.primary },
   cellNum: { fontSize: 13, fontWeight: '600' },

@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   doneBox: {
     padding: SPACING.md,
     borderRadius: RADIUS.md,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: COLORS.successSurface,
     marginBottom: SPACING.md,
   },
   doneText: { color: COLORS.success, fontWeight: '600' },

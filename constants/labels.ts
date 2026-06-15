@@ -1,4 +1,5 @@
 import type { JobProcess, JobStatus } from '@/types';
+import type { JobTone } from './colors';
 
 export const PROCESS_LABEL: Record<JobProcess, string> = {
   installation: '시공',
@@ -18,4 +19,16 @@ export const STATUS_LABEL: Record<JobStatus, string> = {
   completed: '완료',
   paid: '수금 완료',
   cancelled: '취소',
+};
+
+// 일감 상태 → 의미 색 토큰(JOB_COLORS 키). 색은 이 매핑으로만 결정한다.
+export const JOB_STATUS_TONE: Record<JobStatus, JobTone> = {
+  requested: 'new',
+  accepted: 'wait',
+  confirmed: 'active',
+  checked_in: 'active',
+  completed: 'done',
+  paid: 'done',
+  rejected: 'inactive',
+  cancelled: 'inactive',
 };

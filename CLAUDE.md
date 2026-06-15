@@ -113,7 +113,9 @@ barogisa/
 ├── components/             # 공통 컴포넌트
 ├── hooks/                  # 커스텀 훅
 ├── services/               # Supabase 연동 (supabase.ts, jobs.ts, jobsApi seam)
-├── supabase/migrations/    # DB 스키마·RLS·RPC (001~004)
+├── constants/              # 디자인 토큰 (colors·layout·labels) — 색/간격 단일 소스
+├── docs/DESIGN.md          # 디자인 시스템 규칙 (UI 작업 전 필독)
+├── supabase/migrations/    # DB 스키마·RLS·RPC
 ├── types/                  # TypeScript 타입 정의
 └── CLAUDE.md               # 이 파일
 ```
