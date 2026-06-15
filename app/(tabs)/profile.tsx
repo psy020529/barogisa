@@ -1,13 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DaumPostcode from '@/components/DaumPostcode';
 import { COLORS, FONT_SIZE, FONT_WEIGHT, HIT_SLOP, PROCESS_LABEL, RADIUS, SPACING } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { searchAddress } from '@/services/naver';
-import { registerForPushToken } from '@/services/push';
 import type { DriverJobType } from '@/types';
 
 // 베타 직군: 시공·재단·조립만 (청소/수전/용달은 추후)
@@ -17,12 +15,6 @@ export default function ProfileScreen() {
   const { user, signOut, deleteAccount, updateDriverJobType, updateStartLocation } = useAuth();
   const isDriver = user?.role === 'driver';
   const roleLabel = user?.role === 'driver' ? '시공기사' : user?.role === 'factory' ? '공장' : '-';
-
-  // [임시·검증용] 푸시 토큰 발급 확인 — 검증 끝나면 제거
-  const [pushToken, setPushToken] = useState<string>('발급 중...');
-  useEffect(() => {
-    registerForPushToken().then((t) => setPushToken(t ?? '발급 실패 (FCM 미연결 가능성)'));
-  }, []);
 
   const changeStartLocation = async (roadAddress: string) => {
     try {
@@ -124,18 +116,6 @@ export default function ProfileScreen() {
             </View>
           </>
         )}
-
-        {/* [임시] 푸시 토큰 검증 */}
-        <Text style={styles.sectionTitle}>푸시 토큰 (검증용)</Text>
-        <View style={styles.card}>
-          <Text selectable style={styles.tokenText}>{pushToken}</Text>
-          <Pressable
-            style={styles.tokenShareBtn}
-            onPress={() => Share.share({ message: pushToken })}
-          >
-            <Text style={styles.tokenShareText}>토큰 공유</Text>
-          </Pressable>
-        </View>
 
         {/* 계정 */}
         <Text style={styles.sectionTitle}>계정</Text>
@@ -248,9 +228,6 @@ const styles = StyleSheet.create({
   rowDivider: { borderBottomWidth: 1, borderBottomColor: COLORS.border },
   rowLabel: { flex: 1, fontSize: FONT_SIZE.title, fontWeight: FONT_WEIGHT.medium },
 
-  tokenText: { fontSize: FONT_SIZE.caption, color: COLORS.text },
-  tokenShareBtn: { marginTop: SPACING.sm, alignSelf: 'flex-start', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.md, backgroundColor: COLORS.primary },
-  tokenShareText: { color: COLORS.textInverse, fontWeight: FONT_WEIGHT.semibold, fontSize: FONT_SIZE.caption },
   deleteWrap: { alignSelf: 'center', marginTop: SPACING.xl },
   deleteText: { color: COLORS.textLight, fontSize: FONT_SIZE.caption, textDecorationLine: 'underline' },
 });
