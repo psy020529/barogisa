@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { login as kakaoLogin, unlink as kakaoUnlink } from '@react-native-kakao/user';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { registerForPushToken } from '@/services/push';
 import { getSupabase, hasSupabaseConfig } from '@/services/supabase';
 import type { DriverJobType, DriverTier, User, UserRole } from '@/types';
 
@@ -69,6 +70,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(rowToUser(data));
     setStatus('authenticated');
+    void syncPushToken(session.user.id);
+  }
+
+  // 인증된 사용자의 Expo push token 을 발급해 users.push_token 에 저장 (변경 시에만)
+  async function syncPushToken(uid: string) {
+    const token = await registerForPushToken();
+    if (!token) return;
+    const supabase = getSupabase();
+    await supabase.from('users').update({ push_token: token }).eq('id', uid);
   }
 
   // ── 카카오 네이티브 로그인 ──────────────────────────────────────────────────
