@@ -96,6 +96,10 @@
   + 제목 앞 **색 점**(`toneDot` 10×10, `JOB_COLORS[tone]`) + 우측 상태 라벨(작은 글씨, 상태색).
   (TimeBlocks 방식 — 면으로 색을 주고 점/텍스트로 강조)
 - **일반 카드**: `surface` 배경 + `RADIUS.md`.
+- **통계 카드(`components/StatCard`)**: 요약 수치(수익·미수금·건수 등)에 사용.
+  라벨(작게·`textMuted`, 위) + 값(크게·`extrabold`, 아래)이 위계. 강조는 **값의 색**(tone)으로만:
+  `success`(수익)·`danger`(미수금)·`primary`(건수)·`default`. **좌측 색 바 절대 금지.**
+  `size="sm"`(가로 3분할) / `size="lg"`(단독 큰 카드).
 - **상태 pill**: 필요 시 `RADIUS.pill` + 상태색 배경 + `textInverse`. (일감 카드엔 점+라벨을 우선)
 - **안내 배너**: `warningSurface`+`warningBorder`, 좌측 이모지 신호(🔴🟡🔵), 우측 `›`. 화면당 **가장 급한 1건만**.
 - **기본 버튼**: `primary` 배경 / `textInverse` / `title` `bold` / 세로 패딩 `lg`. 비활성 `opacity 0.6`.

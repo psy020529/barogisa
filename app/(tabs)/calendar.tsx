@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONT_SIZE, JOB_COLORS, JOB_STATUS_TONE, JOB_SURFACE, PROCESS_LABEL, RADIUS, SPACING, type JobTone } from '@/constants';
+import { StatCard } from '@/components/StatCard';
 import { useAuth } from '@/hooks/useAuth';
 import { useDriverJobs, useMyApplications, useOpenJobs } from '@/hooks/useJobs';
 import type { Job } from '@/types';
@@ -99,9 +100,9 @@ export default function CalendarScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={{ paddingBottom: SPACING.xl }}>
         <View style={styles.summaryRow}>
-          <SummaryCell label="이번달 수익" value={`${formatCurrencyShort(summary.monthIncome)}원`} accent={JOB_COLORS.done} />
-          <SummaryCell label="미수금" value={`${formatCurrencyShort(summary.unpaid)}원`} accent={JOB_COLORS.new} />
-          <SummaryCell label="이번주 일감" value={`${summary.weekCount}건`} accent={JOB_COLORS.active} />
+          <StatCard label="이번달 수익" value={`${formatCurrencyShort(summary.monthIncome)}원`} tone="success" />
+          <StatCard label="미수금" value={`${formatCurrencyShort(summary.unpaid)}원`} tone="danger" />
+          <StatCard label="이번주 일감" value={`${summary.weekCount}건`} tone="primary" />
         </View>
 
         {banner && (
@@ -208,15 +209,6 @@ function DayCell({
   );
 }
 
-function SummaryCell({ label, value, accent }: { label: string; value: string; accent: string }) {
-  return (
-    <View style={[styles.summaryCell, { borderLeftColor: accent }]}>
-      <Text style={styles.summaryLabel}>{label}</Text>
-      <Text style={styles.summaryValue}>{value}</Text>
-    </View>
-  );
-}
-
 function Legend({ color, label }: { color: string; label: string }) {
   return (
     <View style={styles.legendItem}>
@@ -254,9 +246,6 @@ function SlotRow({ slot }: { slot: Slot }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   summaryRow: { flexDirection: 'row', paddingHorizontal: SPACING.md, paddingVertical: SPACING.md, gap: SPACING.sm },
-  summaryCell: { flex: 1, backgroundColor: COLORS.card, borderRadius: RADIUS.md, padding: SPACING.md, borderLeftWidth: 4 },
-  summaryLabel: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted },
-  summaryValue: { marginTop: 4, fontSize: FONT_SIZE.title, fontWeight: '700', color: COLORS.text },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',

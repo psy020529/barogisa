@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatCard } from '@/components/StatCard';
 import { COLORS, FONT_SIZE, RADIUS, SPACING } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useDriverJobs } from '@/hooks/useJobs';
@@ -84,10 +85,13 @@ export default function SettlementScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={{ padding: SPACING.md }}>
-        <View style={styles.header}>
-          <Text style={styles.headerLabel}>총 미수금</Text>
-          <Text style={styles.headerValue}>{formatCurrency(totalUnpaid)}</Text>
-        </View>
+        <StatCard
+          label="총 미수금"
+          value={formatCurrency(totalUnpaid)}
+          tone="danger"
+          size="lg"
+          style={{ marginBottom: SPACING.md }}
+        />
 
         {groups.length === 0 && <Text style={styles.empty}>정산할 시공 내역이 없습니다.</Text>}
 
@@ -135,16 +139,6 @@ export default function SettlementScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  header: {
-    padding: SPACING.lg,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.card,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.danger,
-    marginBottom: SPACING.md,
-  },
-  headerLabel: { fontSize: FONT_SIZE.caption, color: COLORS.textMuted },
-  headerValue: { fontSize: FONT_SIZE.display, fontWeight: '700', color: COLORS.text, marginTop: 4 },
   empty: { textAlign: 'center', padding: SPACING.xl, color: COLORS.textMuted },
   group: {
     padding: SPACING.md,
