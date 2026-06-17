@@ -2,6 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { COLORS } from '@/constants';
 
+// 장부 앱(피벗) 탭: 캘린더 · 거래처 · 정산 · 단가표
+// 매칭 시절 화면(find)·프로필은 Phase 2 보존 — 탭에서 숨김(href: null)
 export default function TabsLayout() {
   return (
     <Tabs
@@ -21,10 +23,12 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="find"
+        name="partners"
         options={{
-          title: '일감 찾기',
-          tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />,
+          title: '거래처',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'business' : 'business-outline'} size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -37,14 +41,18 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="rates"
         options={{
-          title: '내 정보',
+          title: '단가표',
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
+            <Ionicons name={focused ? 'pricetag' : 'pricetag-outline'} size={size} color={color} />
           ),
         }}
       />
+
+      {/* Phase 2 보존 — 탭에서 숨김 */}
+      <Tabs.Screen name="find" options={{ href: null }} />
+      <Tabs.Screen name="profile" options={{ href: null }} />
     </Tabs>
   );
 }

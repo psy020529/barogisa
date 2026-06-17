@@ -16,8 +16,7 @@ export default function Index() {
   if (status === 'unauthenticated') return <Redirect href="/(auth)/login" />;
   if (status === 'needs-onboarding') return <Redirect href="/(auth)/onboarding" />;
 
-  // authenticated
-  if (user?.role === 'driver') return <Redirect href="/(tabs)/calendar" />;
-  if (user?.role === 'factory') return <Redirect href="/factory" />;
-  return null;
+  // 장부 앱(피벗): 단일 역할(팀장) — 모두 캘린더로. (매칭/공장화면은 Phase 2)
+  void user;
+  return <Redirect href="/(tabs)/calendar" />;
 }

@@ -4,11 +4,9 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONT_SIZE, RADIUS, SPACING } from '@/constants';
 import { useAuth } from '@/hooks/useAuth';
-import type { UserRole } from '@/types';
 
 export default function Onboarding() {
   const { completeOnboarding } = useAuth();
-  const [role, setRole] = useState<UserRole>('driver');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
@@ -20,7 +18,8 @@ export default function Onboarding() {
     }
     setBusy(true);
     try {
-      await completeOnboarding({ role, name: name.trim(), phone: phone.trim() || undefined });
+      // 단일 역할(팀장). 기존 스키마 호환 위해 role은 driver로 고정.
+      await completeOnboarding({ role: 'driver', name: name.trim(), phone: phone.trim() || undefined });
       router.replace('/');
     } catch (e) {
       Alert.alert('저장 실패', e instanceof Error ? e.message : String(e));
@@ -35,27 +34,12 @@ export default function Onboarding() {
         <Text style={styles.title}>환영합니다</Text>
         <Text style={styles.subtitle}>먼저 한 번만 알려주세요</Text>
 
-        <Text style={styles.label}>역할</Text>
-        <View style={styles.row}>
-          {(['driver', 'factory'] as UserRole[]).map((r) => (
-            <Pressable
-              key={r}
-              style={[styles.chip, role === r && styles.chipActive]}
-              onPress={() => setRole(r)}
-            >
-              <Text style={[styles.chipText, role === r && styles.chipTextActive]}>
-                {r === 'driver' ? '기사' : '공장'}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
         <Text style={styles.label}>이름 또는 상호</Text>
         <TextInput
           style={styles.input}
           value={name}
           onChangeText={setName}
-          placeholder={role === 'driver' ? '예: 김기사' : '예: 한솔주방'}
+          placeholder="예: 김팀장"
         />
 
         <Text style={styles.label}>연락처 (선택)</Text>
