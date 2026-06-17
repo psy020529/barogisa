@@ -266,6 +266,16 @@ export async function createWorkLog(input: WorkLogInput, ownerId: string): Promi
   return data.id;
 }
 
+export async function getWorkLog(id: string): Promise<WorkLog | null> {
+  const { data, error } = await getSupabase()
+    .from('work_logs')
+    .select('*, partners(name)')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? rowToWorkLog(data) : null;
+}
+
 export async function updateWorkLogPayment(id: string, payment: 'unpaid' | 'paid'): Promise<void> {
   const { error } = await getSupabase()
     .from('work_logs')
