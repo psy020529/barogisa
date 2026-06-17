@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>바로기사 — 기록 중심 캘린더 앱 와이어프레임</title>
+<style>
+  :root{
+    --paper:#FAFAF9; --ink:#1A1A1A; --muted:#7A7A78; --faint:#A8A8A6;
+    --line:#D8D8D4; --fill:#EFEFEC; --fill2:#E4E4DF;
+    --note:#2563EB;            /* 스펙 주석 액센트 */
+    --money:#15803D;           /* 수익 */
+    --due:#B45309;             /* 미수금/경고 */
+    --frame:#222;
+    --sans:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+    --mono:ui-monospace,"SFMono-Regular","JetBrains Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);background:#CFCFCB;color:var(--ink);line-height:1.45;-webkit-font-smoothing:antialiased}
+
+  /* ---------- Canvas chrome ---------- */
+  .top{position:sticky;top:0;z-index:30;background:#1c1c1c;color:#f4f4f2;padding:14px 20px;border-bottom:1px solid #000}
+  .top h1{font-size:15px;font-weight:700;letter-spacing:-.01em}
+  .top h1 span{color:#8a8a88;font-weight:500}
+  .top p{font-size:11px;color:#9a9a98;margin-top:2px;font-family:var(--mono)}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;padding:12px 20px;background:#262625;position:sticky;top:50px;z-index:29;border-bottom:1px solid #000}
+  .tab{font-family:var(--mono);font-size:11.5px;color:#bdbdba;background:#333331;border:1px solid #444;border-radius:6px;padding:6px 11px;cursor:pointer;transition:.12s}
+  .tab:hover{background:#3d3d3a;color:#fff}
+  .tab.on{background:var(--note);border-color:var(--note);color:#fff}
+
+  .stage{display:flex;gap:26px;align-items:flex-start;justify-content:center;padding:30px 20px 70px;flex-wrap:wrap}
+
+  /* ---------- Phone frame ---------- */
+  .phone{width:390px;flex:0 0 390px;background:var(--paper);border:11px solid var(--frame);border-radius:38px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.28);position:relative;height:780px;display:flex;flex-direction:column}
+  .notch{height:26px;background:var(--frame);position:relative;flex:0 0 26px}
+  .notch::after{content:"";position:absolute;width:120px;height:18px;background:var(--frame);border-radius:0 0 14px 14px;left:50%;transform:translateX(-50%);top:0}
+  .statusbar{display:flex;justify-content:space-between;padding:8px 22px 4px;font-size:11px;font-family:var(--mono);color:var(--muted);flex:0 0 auto}
+  .viewport{flex:1;overflow-y:auto;position:relative}
+  .viewport::-webkit-scrollbar{width:0}
+
+  /* ---------- Screens ---------- */
+  .screen{display:none;padding:6px 16px 90px}
+  .screen.on{display:block}
+
+  .appbar{display:flex;align-items:center;justify-content:space-between;padding:8px 2px 14px}
+  .appbar .title{font-size:18px;font-weight:700;letter-spacing:-.02em}
+  .appbar .sub{font-size:11px;color:var(--muted);font-family:var(--mono)}
+  .iconbtn{width:34px;height:34px;border:1px solid var(--line);border-radius:9px;background:#fff;display:grid;place-items:center;font-size:15px;color:var(--muted);cursor:pointer}
+  .back{font-size:13px;color:var(--note);cursor:pointer;font-weight:600}
+
+  /* summary cards */
+  .summary{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px}
+  .card{border:1px solid var(--line);border-radius:12px;padding:11px 13px;background:#fff}
+  .card .lab{font-size:10.5px;color:var(--muted);font-family:var(--mono)}
+  .card .val{font-size:18px;font-weight:700;margin-top:3px;letter-spacing:-.02em}
+  .card .val.m{color:var(--money)} .card .val.d{color:var(--due)}
+  .card .meta{font-size:10px;color:var(--faint);margin-top:2px}
+
+  /* segmented */
+  .seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#fff;margin-bottom:13px}
+  .seg button{flex:1;border:0;background:#fff;padding:8px 0;font-size:12.5px;font-family:var(--sans);color:var(--muted);cursor:pointer}
+  .seg button.on{background:var(--ink);color:#fff;font-weight:600}
+
+  /* calendar grid */
+  .calhead{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:10.5px;color:var(--faint);font-family:var(--mono);margin-bottom:4px}
+  .calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .cell{aspect-ratio:1/1.15;border:1px solid var(--line);border-radius:8px;padding:5px 4px;font-size:11px;color:var(--ink);position:relative;background:#fff;cursor:pointer;overflow:hidden}
+  .cell.out{background:var(--fill);color:var(--faint);border-color:transparent;cursor:default}
+  .cell.has{border-color:var(--ink)}
+  .cell.sel{outline:2px solid var(--note);outline-offset:-2px}
+  .cell .amt{position:absolute;left:4px;bottom:4px;font-size:8.5px;font-family:var(--mono);color:var(--money);font-weight:600}
+  .cell .dot{position:absolute;right:5px;top:6px;width:5px;height:5px;border-radius:50%;background:var(--ink)}
+  .cell .dot.d{background:var(--due)}
+
+  /* day sheet */
+  .sheet{margin-top:14px;border:1px solid var(--line);border-radius:12px;background:#fff}
+  .sheet .sh{display:flex;justify-content:space-between;align-items:center;padding:11px 13px;border-bottom:1px solid var(--line)}
+  .sheet .sh b{font-size:13px} .sheet .sh span{font-size:10.5px;color:var(--muted);font-family:var(--mono)}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:11px 13px;border-bottom:1px solid var(--fill)}
+  .row:last-child{border-bottom:0}
+  .row .l b{font-size:13px;font-weight:600} .row .l p{font-size:10.5px;color:var(--muted);margin-top:2px}
+  .row .r{text-align:right} .row .r b{font-size:13px;color:var(--money)} .row .r .st{font-size:9.5px;font-family:var(--mono);padding:1px 6px;border-radius:5px;margin-top:3px;display:inline-block}
+  .st.done{background:#DCFCE7;color:#166534} .st.due{background:#FEF3C7;color:#92400E}
+
+  /* form */
+  .field{margin-bottom:13px}
+  .field>label{display:block;font-size:11.5px;color:var(--muted);font-family:var(--mono);margin-bottom:5px}
+  .field .req{color:var(--note)}
+  .inp{width:100%;border:1px solid var(--line);border-radius:9px;padding:11px 12px;font-size:13.5px;font-family:var(--sans);background:#fff;color:var(--ink)}
+  .inp.ph{color:var(--faint)}
+  select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 16px) 17px,calc(100% - 11px) 17px;background-size:5px 5px;background-repeat:no-repeat}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{border:1px solid var(--line);border-radius:18px;padding:7px 13px;font-size:12.5px;background:#fff;cursor:pointer;color:var(--muted)}
+  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .photo{border:1.5px dashed var(--line);border-radius:10px;height:64px;display:grid;place-items:center;color:var(--faint);font-size:11.5px;font-family:var(--mono)}
+  .calcbox{border:1px solid var(--note);border-radius:10px;padding:12px 13px;background:#EFF4FF;display:flex;justify-content:space-between;align-items:center}
+  .calcbox .lab{font-size:11px;color:var(--note);font-family:var(--mono)}
+  .calcbox .v{font-size:20px;font-weight:700;color:var(--note);letter-spacing:-.02em}
+  .calcbox .f{font-size:9.5px;color:#6b8bd6;font-family:var(--mono);margin-top:2px}
+
+  .btn{width:100%;border:0;border-radius:11px;background:var(--ink);color:#fff;padding:14px;font-size:14px;font-weight:700;font-family:var(--sans);cursor:pointer;margin-top:6px}
+  .btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .btn.note{background:var(--note)}
+
+  /* partner list */
+  .search{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;margin-bottom:12px;color:var(--faint);font-size:13px}
+  .pcard{border:1px solid var(--line);border-radius:11px;padding:12px 13px;background:#fff;margin-bottom:9px;cursor:pointer}
+  .pcard .ph{display:flex;justify-content:space-between;align-items:start}
+  .pcard b{font-size:14px;font-weight:600}
+  .pcard .ty{font-size:9.5px;font-family:var(--mono);color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  .pcard .tr{font-size:11px;color:var(--muted);margin-top:6px}
+  .pcard .rate{font-size:11px;color:var(--ink);margin-top:7px;font-family:var(--mono);background:var(--fill);border-radius:6px;padding:5px 8px;display:inline-block}
+
+  /* rate table */
+  .rtrow{display:grid;grid-template-columns:1fr 120px;gap:8px;align-items:center;margin-bottom:8px}
+  .rtrow .inp{padding:9px 11px;font-size:12.5px}
+  .rtadd{font-size:12px;color:var(--note);font-weight:600;cursor:pointer;display:inline-block;margin:4px 0 6px;font-family:var(--mono)}
+
+  /* bottom nav */
+  .nav{position:absolute;bottom:0;left:0;right:0;height:64px;background:#fff;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr)}
+  .nav button{border:0;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:10px;color:var(--faint);cursor:pointer;font-family:var(--sans)}
+  .nav button .ic{font-size:17px}
+  .nav button.on{color:var(--ink);font-weight:700}
+  .fab{position:absolute;right:16px;bottom:78px;width:52px;height:52px;border-radius:16px;background:var(--ink);color:#fff;border:0;font-size:24px;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.25);z-index:5}
+
+  /* annotation pins */
+  .pin{display:inline-grid;place-items:center;width:17px;height:17px;border-radius:50%;background:var(--note);color:#fff;font-size:10px;font-weight:700;font-family:var(--mono);vertical-align:middle;margin-left:5px;flex:0 0 auto}
+
+  /* modal */
+  .modal{position:absolute;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;z-index:20}
+  .modal.on{display:flex}
+  .msheet{background:#fff;width:100%;border-radius:18px 18px 0 0;padding:18px 16px 22px;max-height:80%;overflow:auto}
+  .msheet h3{font-size:15px;font-weight:700;margin-bottom:3px}
+  .msheet .desc{font-size:11px;color:var(--muted);margin-bottom:13px;font-family:var(--mono)}
+  .kakao{background:#B2C7DA;border-radius:12px;padding:13px;font-size:12px;line-height:1.7;white-space:pre-line;color:#1a1a1a}
+  .kakao .bub{background:#fff;border-radius:10px;padding:11px 13px;font-family:var(--mono);font-size:11.5px}
+
+  /* spec notes panel */
+  .notes{width:330px;flex:0 0 330px;background:#1f1f1e;border-radius:16px;padding:18px 18px 20px;color:#e6e6e3;position:sticky;top:120px;max-height:82vh;overflow:auto}
+  .notes h2{font-size:13px;font-family:var(--mono);color:#fff;margin-bottom:3px}
+  .notes .scr{font-size:11px;color:#8a8a88;font-family:var(--mono);margin-bottom:14px}
+  .nitem{display:flex;gap:10px;margin-bottom:13px}
+  .nitem .num{flex:0 0 18px;height:18px;border-radius:50%;background:var(--note);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;font-family:var(--mono);margin-top:1px}
+  .nitem .tx{font-size:12px;color:#d4d4d1;line-height:1.5}
+  .nitem .tx b{color:#fff}
+  .nitem .tx code{font-family:var(--mono);font-size:10.5px;background:#333;padding:1px 5px;border-radius:4px;color:#9ec1ff}
+  .legend{margin-top:16px;border-top:1px solid #333;padding-top:13px;font-size:10.5px;color:#8a8a88;font-family:var(--mono);line-height:1.8}
+  .legend .sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle}
+
+  @media(max-width:780px){
+    .notes{position:static;width:390px;flex:0 0 390px;max-height:none}
+  }
+</style>
+</head>
+<body>
+  <div class="top">
+    <h1>바로기사 <span>· 기록 중심 캘린더 앱 와이어프레임 (MVP)</span></h1>
+    <p>매칭 제외 / 기록·정산 집중 · 모바일 · 1차 사용자 = 팀장</p>
+  </div>
+  <div class="tabs" id="tabs">
+    <button class="tab on" data-s="s1">1 · 캘린더(홈)</button>
+    <button class="tab" data-s="s2">2 · 작업 기록 추가</button>
+    <button class="tab" data-s="s3">3 · 거래처 목록</button>
+    <button class="tab" data-s="s3b">3b · 거래처 등록</button>
+    <button class="tab" data-s="s4">4 · 정산 내역</button>
+    <button class="tab" data-s="s5">5 · 단가표 편집</button>
+  </div>
+
+  <div class="stage">
+    <!-- PHONE -->
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="statusbar"><span>9:41</span><span>5G ▮▮▮ 100%</span></div>
+      <div class="viewport">
+
+        <!-- S1 캘린더 -->
+        <section class="screen on" id="s1">
+          <div class="appbar">
+            <div><div class="title">캘린더</div><div class="sub">2026 · 5월</div></div>
+            <div class="iconbtn">◇</div>
+          </div>
+          <div class="summary">
+            <div class="card"><div class="lab">이번 달 수익</div><div class="val m">₩9,450,000</div><div class="meta">시공 27건 자동 합산</div></div>
+            <div class="card"><div class="lab">미수금</div><div class="val d">₩2,170,000</div><div class="meta">2곳 · 14일 경과 알림</div></div>
+          </div>
+          <div class="seg"><button class="on">월</button><button>주</button></div>
+          <div class="calhead"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
+          <div class="calgrid" id="calgrid"></div>
+          <div class="sheet" id="daysheet" style="display:none">
+            <div class="sh"><b id="dsdate">5월 12일 (월)</b><span>2건 · ₩1,180,000</span></div>
+            <div class="row"><div class="l"><b>한솔퍼니쳐 · 싱크대 시공</b><p>팀원 2명 · 위례신도시 · 사진 1</p></div><div class="r"><b>₩700,000</b><br><span class="st done">입금완료</span></div></div>
+            <div class="row"><div class="l"><b>대성주방 · 상부장 조립</b><p>팀원 3명 · 사진 6</p></div><div class="r"><b>₩870,000</b><br><span class="st due">미수 16일</span></div></div>
+          </div>
+        </section>
+
+        <!-- S2 작업 기록 추가 -->
+        <section class="screen" id="s2">
+          <div class="appbar">
+            <div><span class="back" data-go="s1">‹ 취소</span><div class="title" style="margin-top:6px">작업 기록 추가</div></div>
+            <span class="sub">3탭 목표</span>
+          </div>
+          <div class="field">
+            <label>거래처 <span class="req">*</span></label>
+            <select class="inp" id="selPartner" onchange="recalc()">
+              <option value="">내 거래처에서 선택…</option>
+              <option value="350000">한솔퍼니쳐 (싱크대 시공 · 35만/인)</option>
+              <option value="290000">대성주방 (상부장 조립 · 29만/인)</option>
+              <option value="450000">우림가구 (재단+조립 · 45만/인)</option>
+            </select>
+          </div>
+          <div class="field"><label>날짜</label><div class="inp">2026. 05. 12 (월)</div></div>
+          <div class="field">
+            <label>작업 유형</label>
+            <div class="chips"><span class="chip on">시공</span><span class="chip">실측</span><span class="chip">재단</span><span class="chip">AS</span></div>
+          </div>
+          <div class="field">
+            <label>투입 팀원 <span class="req">*</span></label>
+            <div class="chips" id="memChips">
+              <span class="chip on" data-on="1">조○○</span><span class="chip on" data-on="1">김○○</span><span class="chip" data-on="0">홍○○</span><span class="chip" data-on="0">이○○</span>
+            </div>
+          </div>
+          <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+            <div><label>일수</label><div class="inp">1</div></div>
+            <div><label>사진(선택)</label><div class="photo">+ 촬영·첨부</div></div>
+          </div>
+          <div class="calcbox">
+            <div><div class="lab">합산 금액 (자동)</div><div class="f" id="calcformula">35만 × 2명 × 1일</div></div>
+            <div class="v" id="calcval">₩700,000</div>
+          </div>
+          <button class="btn" style="margin-top:14px" data-go="s1">저장</button>
+        </section>
+
+        <!-- S3 거래처 목록 -->
+        <section class="screen" id="s3">
+          <div class="appbar"><div><div class="title">내 거래처</div><div class="sub">12곳 등록됨</div></div></div>
+          <div class="search">⌕ &nbsp;업체명·지역·공종 검색</div>
+          <div class="pcard" data-go="s5">
+            <div class="ph"><b>한솔퍼니쳐</b><span class="ty">공장</span></div>
+            <div class="tr">위례 · 싱크대, 상부장</div>
+            <div class="rate">싱크대 시공 35만 · 상부장 28만</div>
+          </div>
+          <div class="pcard" data-go="s5">
+            <div class="ph"><b>대성주방</b><span class="ty">공장</span></div>
+            <div class="tr">구리 · 상부장, 재단</div>
+            <div class="rate">상부장 조립 29만 · 재단 38만</div>
+          </div>
+          <div class="pcard" data-go="s5">
+            <div class="ph"><b>우림가구</b><span class="ty">대리점</span></div>
+            <div class="tr">수지 · 전체</div>
+            <div class="rate">재단+조립 45만</div>
+          </div>
+          <button class="btn ghost" data-go="s3b" style="margin-top:6px">+ 거래처 등록</button>
+        </section>
+
+        <!-- S3b 거래처 등록 -->
+        <section class="screen" id="s3b">
+          <div class="appbar"><div><span class="back" data-go="s3">‹ 거래처</span><div class="title" style="margin-top:6px">거래처 등록</div></div></div>
+          <div class="field"><label>업체명 <span class="req">*</span></label><div class="inp ph">예: 한솔퍼니쳐</div></div>
+          <div class="field"><label>유형 <span class="req">*</span></label>
+            <div class="chips"><span class="chip on">공장</span><span class="chip">인테리어</span><span class="chip">대리점·유통</span><span class="chip">개인·기타</span></div>
+          </div>
+          <div class="field"><label>위치</label><div class="inp ph">지역 검색…</div></div>
+          <div class="field"><label>주요 공종 <span class="req">*</span></label>
+            <div class="chips"><span class="chip on">싱크대</span><span class="chip on">상부장</span><span class="chip">붙박이장</span><span class="chip">도어</span><span class="chip">재단</span></div>
+          </div>
+          <div class="field"><label>담당자·연락처 (선택)</label><div class="inp ph">앱 내에서만 노출</div></div>
+          <button class="btn note" data-go="s5">다음 — 단가 입력</button>
+          <p style="font-size:10.5px;color:var(--muted);text-align:center;margin-top:10px;font-family:var(--mono)">단가는 건너뛰고 첫 기록 때 입력해도 됩니다</p>
+        </section>
+
+        <!-- S4 정산 -->
+        <section class="screen" id="s4">
+          <div class="appbar"><div><div class="title">정산 내역</div><div class="sub">2026 · 5월</div></div><div class="iconbtn">◇</div></div>
+          <div class="summary">
+            <div class="card"><div class="lab">총 정산액</div><div class="val m">₩9,450,000</div></div>
+            <div class="card"><div class="lab">미수금</div><div class="val d">₩2,170,000</div><div class="meta">2건</div></div>
+          </div>
+          <div class="seg" id="setseg"><button class="on" data-set="p">거래처별</button><button data-set="m">팀원별</button></div>
+          <div id="set-p">
+            <div class="sheet">
+              <div class="row"><div class="l"><b>한솔퍼니쳐</b><p>시공 8건</p></div><div class="r"><b>₩3,500,000</b><br><span class="st done">입금완료</span></div></div>
+              <div class="row"><div class="l"><b>대성주방</b><p>시공 6건</p></div><div class="r"><b>₩2,170,000</b><br><span class="st due">미수 16일</span></div></div>
+              <div class="row"><div class="l"><b>우림가구</b><p>시공 13건</p></div><div class="r"><b>₩3,780,000</b><br><span class="st done">입금완료</span></div></div>
+            </div>
+          </div>
+          <div id="set-m" style="display:none">
+            <div class="sheet">
+              <div class="row"><div class="l"><b>조○○</b><p>4일 투입</p></div><div class="r"><b>₩1,530,000</b></div></div>
+              <div class="row"><div class="l"><b>김○○</b><p>3일 투입</p></div><div class="r"><b>₩1,180,000</b></div></div>
+              <div class="row"><div class="l"><b>홍○○</b><p>1일 투입</p></div><div class="r"><b>₩380,000</b></div></div>
+            </div>
+          </div>
+          <button class="btn note" style="margin-top:14px" onclick="openModal()">정산 메시지 만들기</button>
+        </section>
+
+        <!-- S5 단가표 -->
+        <section class="screen" id="s5">
+          <div class="appbar"><div><span class="back" data-go="s3">‹ 거래처</span><div class="title" style="margin-top:6px">한솔퍼니쳐 · 단가표</div></div></div>
+          <p style="font-size:11.5px;color:var(--muted);margin-bottom:13px">여기서 정한 단가가 작업 기록 시 자동으로 불러와집니다.</p>
+          <div class="rtrow"><input class="inp" value="싱크대 시공"><input class="inp" value="350,000"></div>
+          <div class="rtrow"><input class="inp" value="상부장 조립"><input class="inp" value="280,000"></div>
+          <div class="rtrow"><input class="inp" value="재단"><input class="inp" value="380,000"></div>
+          <span class="rtadd">+ 공종 추가</span>
+          <button class="btn" style="margin-top:10px" data-go="s3">저장</button>
+        </section>
+
+      </div><!--/viewport-->
+
+      <!-- FAB (캘린더에서만) -->
+      <button class="fab" id="fab" data-go="s2">+</button>
+
+      <!-- bottom nav -->
+      <div class="nav" id="nav">
+        <button class="on" data-s="s1"><span class="ic">▦</span>캘린더</button>
+        <button data-s="s3"><span class="ic">▥</span>거래처</button>
+        <button data-s="s4"><span class="ic">₩</span>정산</button>
+        <button data-s="s5"><span class="ic">☰</span>단가표</button>
+      </div>
+
+      <!-- 정산 메시지 모달 -->
+      <div class="modal" id="modal">
+        <div class="msheet">
+          <h3>정산 메시지 — 한솔퍼니쳐</h3>
+          <div class="desc">쌓인 기록으로 자동 생성 · 그대로 복사해 카톡 전송</div>
+          <div class="kakao"><div class="bub">안녕하세요 사장님, 5월 시공비 내역입니다!
+
+*5/11 마포현장
+ 조○○ 38만 / 김○○ 38만 / 홍○○ 38만
+*5/12 위례현장
+ 조○○ 35만 / 김○○ 35만
+*5/13 마포현장
+ 조○○ 35만
+
+합계 2,170,000원
+입금계좌: 기업 000-0000-0000 홍○○</div></div>
+          <button class="btn note" style="margin-top:14px" onclick="copyMsg()">메시지 복사</button>
+          <button class="btn ghost" style="margin-top:8px" onclick="closeModal()">닫기</button>
+        </div>
+      </div>
+    </div><!--/phone-->
+
+    <!-- SPEC NOTES -->
+    <aside class="notes">
+      <h2 id="nTitle">스펙 노트</h2>
+      <div class="scr" id="nScr">화면 1 · 캘린더(홈)</div>
+      <div id="nBody"></div>
+      <div class="legend">
+        <div><span class="sw" style="background:#15803D"></span>수익 / 입금완료</div>
+        <div><span class="sw" style="background:#B45309"></span>미수금 / 14일 경과</div>
+        <div><span class="sw" style="background:#2563EB"></span>자동계산·핵심 동작</div>
+        <div><span class="sw" style="background:#D8D8D4"></span>입력 placeholder · 미작성</div>
+      </div>
+    </aside>
+  </div>
+
+<script>
+  const NOTES = {
+    s1:["화면 1 · 캘린더(홈)",[
+      ["상단 요약은 항상 노출 — <b>돈이 보이는 캘린더</b>의 핵심. 이번 달 누적 수익·미수금이 진입 즉시 보인다."],
+      ["각 날짜 셀에 <b>금액</b>이 함께 표기 → 일정표이자 장부. 미수 건이 있는 날은 우상단 <code>경고 dot</code>."],
+      ["날짜 탭 → 하단 시트로 그날 작업 목록(거래처·팀원·금액·입금상태)을 펼침."],
+      ["우하단 <b>+ FAB</b> → 작업 기록 추가(화면 2). 가장 빈번한 동작이라 항상 손 닿는 위치."],
+      ["하단 탭: 캘린더 / 거래처 / 정산 / 단가표. 매칭 탭은 이번 MVP에 <b>없음</b>."]
+    ]],
+    s2:["화면 2 · 작업 기록 추가",[
+      ["<b>거래처 선택 시 단가 자동 로드</b> — 사용자는 단가를 떠올리지 않는다. <code>partner.rate</code> 참조."],
+      ["투입 팀원 멀티 선택. 금액 = <code>단가 × 인원 × 일수</code> 로 실시간 재계산(파란 박스)."],
+      ["핵심 경로 <b>3탭</b>: 거래처 → 팀원 → 저장. 날짜는 today 기본, 작업유형은 시공 기본."],
+      ["사진은 <b>선택</b> — 하자·정산 근거. 미입력이어도 저장 가능."],
+      ["금액은 자동값이지만 <b>수기 보정 가능</b>해야 함(추가비·할인 현장 대응)."]
+    ]],
+    s3:["화면 3 · 거래처 목록",[
+      ["<b>에브리타임식</b> — 등록해 둔 거래처를 검색·재사용. 한 번 등록하면 기록이 빨라진다."],
+      ["카드에 <b>단가 요약</b> 노출 → 어떤 단가로 잡히는지 즉시 확인."],
+      ["카드 탭 → 단가표 편집(화면 5)."],
+      ["담당자 연락처는 <b>앱 내에서만</b> 표시(추후 매칭 단계의 락인 정합성 대비)."],
+      ["초기 콜드스타트 완화: 보유 공장 5곳을 <b>시드</b>로 미리 채워둘지 결정 필요."]
+    ]],
+    s3b:["화면 3b · 거래처 등록",[
+      ["필수: 업체명 · 유형 · 공종. 위치·연락처는 선택."],
+      ["<b>단가 입력은 건너뛰기 허용</b> — 진입장벽↓. 첫 기록 때 단가를 요청하는 단계적 방식(PM 결정 1)."],
+      ["유형/공종은 칩 멀티선택. 신규 공종은 자유 입력 허용 권장."]
+    ]],
+    s4:["화면 4 · 정산 내역",[
+      ["<b>거래처별 / 팀원별</b> 토글. 거래처별=받을 돈, 팀원별=줄 돈."],
+      ["미수 건은 <code>미수 N일</code> 배지. 14일 경과 시 알림 트리거."],
+      ["<b>킬러 기능</b> — [정산 메시지 만들기] → 화면 4b 모달."],
+      ["MVP 입금확인은 <b>수동 체크</b>. 통장 자동매칭(오픈뱅킹)은 Phase 2."]
+    ]],
+    "4b":["화면 4b · 정산 메시지 (모달)",[
+      ["기록을 모아 팀장이 쓰던 <b>카톡 정산 양식 그대로</b> 자동 생성."],
+      ["통장연동 없이 즉시 주는 '편하다'의 보상. [복사] 후 카톡에 붙여넣기."],
+      ["양식은 <b>실제 팀장 샘플</b> 기반으로 모사 — 베타 기사 샘플 수집 필요(PM 결정 4)."]
+    ]],
+    s5:["화면 5 · 단가표 편집",[
+      ["거래처별 <b>공종 → 일당</b> 표. 작업 기록의 자동계산 소스."],
+      ["행 추가/삭제. 공종명은 거래처 등록의 공종과 연동 권장."],
+      ["저장 시 즉시 반영 — 이후 모든 기록에 새 단가 적용(과거 기록은 불변)."]
+    ]]
+  };
+  function renderNotes(key){
+    const d = NOTES[key]; if(!d) return;
+    document.getElementById('nScr').textContent = d[0];
+    document.getElementById('nBody').innerHTML = d[1].map((it,i)=>
+      `<div class="nitem"><div class="num">${i+1}</div><div class="tx">${it[0]}</div></div>`).join('');
+  }
+  function show(s){
+    document.querySelectorAll('.screen').forEach(el=>el.classList.toggle('on',el.id===s));
+    document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.s===s));
+    document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.s===s));
+    document.getElementById('fab').style.display = (s==='s1')?'block':'none';
+    document.getElementById('daysheet').style.display='none';
+    renderNotes(s);
+    document.querySelector('.viewport').scrollTop=0;
+  }
+  document.getElementById('tabs').addEventListener('click',e=>{if(e.target.dataset.s)show(e.target.dataset.s)});
+  document.getElementById('nav').addEventListener('click',e=>{const b=e.target.closest('button');if(b&&b.dataset.s)show(b.dataset.s)});
+  document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>show(el.dataset.go)));
+
+  // calendar build
+  (function(){
+    const work={4:['',1],5:['₩1.18M',1],11:['₩1.14M',2],12:['₩700K',1],13:['₩350K',1],17:['₩1.28M',2]};
+    let html='';
+    for(let i=0;i<3;i++)html+=`<div class="cell out">${27+i}</div>`;
+    for(let d=1;d<=31;d++){
+      const w=work[d];
+      let cls='cell'+(w?' has':'');
+      let dot=w?`<span class="dot${(d===13||d===17)?' d':''}"></span>`:'';
+      let amt=w&&w[0]?`<span class="amt">${w[0]}</span>`:'';
+      html+=`<div class="${cls}" data-day="${d}">${d}${dot}${amt}</div>`;
+    }
+    const g=document.getElementById('calgrid'); g.innerHTML=html;
+    g.addEventListener('click',e=>{
+      const c=e.target.closest('.cell'); if(!c||c.classList.contains('out'))return;
+      g.querySelectorAll('.cell').forEach(x=>x.classList.remove('sel')); c.classList.add('sel');
+      if(c.classList.contains('has')){document.getElementById('daysheet').style.display='block';document.getElementById('dsdate').textContent='5월 '+c.dataset.day+'일';}
+      else{document.getElementById('daysheet').style.display='none';}
+    });
+  })();
+
+  // s2 recalc
+  function recalc(){
+    const rate=+document.getElementById('selPartner').value||0;
+    const mem=document.querySelectorAll('#memChips .chip.on').length;
+    const total=rate*mem*1;
+    document.getElementById('calcval').textContent = total?('₩'+total.toLocaleString()):'₩0';
+    document.getElementById('calcformula').textContent = (rate/10000)+'만 × '+mem+'명 × 1일';
+  }
+  document.querySelectorAll('#memChips .chip').forEach(c=>c.addEventListener('click',()=>{c.classList.toggle('on');recalc();}));
+  document.querySelectorAll('.chips:not(#memChips) .chip').forEach(c=>c.addEventListener('click',function(){
+    [...this.parentNode.children].forEach(x=>x.classList.remove('on'));this.classList.add('on');
+  }));
+
+  // s4 segment
+  document.getElementById('setseg').addEventListener('click',e=>{
+    if(!e.target.dataset.set)return;
+    [...e.target.parentNode.children].forEach(b=>b.classList.toggle('on',b===e.target));
+    document.getElementById('set-p').style.display=e.target.dataset.set==='p'?'block':'none';
+    document.getElementById('set-m').style.display=e.target.dataset.set==='m'?'block':'none';
+  });
+
+  // modal
+  function openModal(){document.getElementById('modal').classList.add('on');renderNotes('4b');}
+  function closeModal(){document.getElementById('modal').classList.remove('on');renderNotes('s4');}
+  function copyMsg(){alert('메시지가 복사되었습니다 (와이어프레임 데모)');}
+
+  renderNotes('s1');
+</script>
+</body>
+</html>
